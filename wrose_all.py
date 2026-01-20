@@ -234,6 +234,7 @@ class MeteostationsIndex:
 def make_file_name_from_station(station: wind_plot.WeatherStation) -> str:
     return f'Роза ветров в {station.city_name}. График и таблица.docx'
 
+
 @dataclass
 class RoseOfWindFormResult:
     date_from: date
@@ -701,8 +702,8 @@ class Ui_ROSA_VETROV(object):
             try:
                 wind_plot.obr_file(
                     data.meteostation,
-                    data.date_from.strftime("%d.%m.%Y"),
-                    data.date_to.strftime("%d.%m.%Y"),
+                    data.date_from,
+                    data.date_to,
                     data.has_snow,
                     data.has_wind_over_3m_per_s,
                     data.type_of_rose,
@@ -736,10 +737,14 @@ class Ui_ROSA_VETROV(object):
                 self.r_cond.setText(f'Ошибка: В CSV файле отсутствуют необходимые колонки\n{str(e)}')
 
             except Exception as e:
+                import traceback
+                print(traceback.print_exc())
                 self.r_cond.setText(f'Ошибка при выполнении расчета:\n{str(e)}')
                 print(f"Ошибка: {e}")
 
         except BaseException as e:
+            import traceback
+            print(traceback.print_exc())
             self.r_cond.setText(str(e))
 
 

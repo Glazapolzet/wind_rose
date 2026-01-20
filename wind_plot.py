@@ -41,6 +41,53 @@ class WeatherStation:
             f'wrose {self.city_name}'  # [3] базовое имя для сохранения
         ]
 
+    def get_data(self) -> pd.DataFrame:
+        data = pd.read_csv(self.csv_path, encoding='cp1251')
+
+        required_columns = [
+            'dt_time',
+            'Wind_dir',
+            'wind_speed',
+            'precipitation',
+        ]
+
+        missing_columns = [
+            col for col in required_columns if col not in data.columns
+        ]
+
+        if missing_columns:
+            raise ValueError(f"miss columns: {missing_columns}")
+
+        # parse raw fields
+
+        def dateparser(x: str):
+            return datetime.strptime(x, '%d.%m.%Y %H:%M').date()
+
+        data['dt_time'] = data['dt_time'].apply(dateparser)
+
+        data['Wind_dir'] = data['Wind_dir'].astype(str).str.strip()
+
+        data['wind_speed'] = pd.to_numeric(data['wind_speed'], errors='coerce')
+
+        data['precipitation'] = pd.to_numeric(
+            data['precipitation'],
+            errors='coerce',
+        )
+
+        return data
+
+    def get_data_in_date_interval(
+            self,
+            df: datetime,
+            dt: datetime,
+    ) -> pd.DataFrame:
+        data = self.get_data()
+
+        return data.loc[(
+            (data['dt_time'] > df) &
+            (data['dt_time'] < dt)
+        )]
+
     def __str__(self):
         return f"{self.city_name} ({self.file_name})"
 
@@ -68,6 +115,7 @@ def df_preparation(b_w, snow=True, metel=True):
     b_w = b_w.dropna()
 
     print(f"После фильтрации осталось {len(b_w)} записей")
+
     return b_w
 
 
@@ -222,97 +270,75 @@ def wind_rose(b_w, station, r_n, nw=False, total_count=None):
     return
 
 
-def obr_file(station, date_n, date_k, snow, metel, r_n, doc_name):
+def get_data_for_rose_of_wind(
+    station: WeatherStation,
+    date_from: datetime,
+    date_to: datetime,
+    snow: bool,
+    metel: bool,
+) -> pd.DataFrame:
+    data = station.get_data_in_date_interval(date_from, date_to)
+
+    data_wind = pd.DataFrame()
+
+    data_wind['wd'] = data['Wind_dir']
+    data_wind['ws'] = data['wind_speed']
+    data_wind['sn'] = data['precipitation']
+
+    # Преобразование 'CALM' (штиль) в NaN
+    data_wind['wd'] = data_wind['wd'].apply(
+        lambda x: np.nan if x == 'CALM' else x
+    )
+
+    # Фильтрация по снегу
+    if snow:
+        # выбор только тех значений, где sn=2 (снег)
+        data_wind['sn'] = data_wind['sn'].apply(
+            lambda x: np.nan if x != 2 else x
+        )
+
+    # Фильтрация по скорости ветра
+    if metel:
+        data_wind['ws'] = data_wind['ws'].apply(
+            lambda x: np.nan if x < 3 else x
+        )
+
+    # Удаление строк с NaN
+    data_wind = data_wind.dropna()
+
+    return data_wind
+
+
+def obr_file(
+        station,
+        date_from,
+        date_to,
+        snow,
+        metel,
+        r_n,
+        doc_name,
+):
     """Основная функция обработки данных и генерации отчетов"""
     print(f"Обработка файла: {station.csv_path}")
-    print(f"Период: с {date_n} по {date_k}")
+    print(f"Период: с {date_from} по {date_to}")
     print(f"Условия: снег={snow}, ветер≥3м/с={metel}")
 
-    # Временные метки для поиска ближайших измерений
-    time_1 = [' 00:00', ' 03:00', ' 06:00', ' 09:00',
-              ' 12:00', ' 15:00', ' 18:00', ' 21:00']
-
-    # Загрузка CSV файла
-    try:
-        file_csv = pd.read_csv(station.csv_path, encoding='cp1251')
-        print(f"Файл загружен, строк: {len(file_csv)}")
-    except FileNotFoundError:
-        print(f"Файл не найден: {station.csv_path}")
-        return f"Ошибка: Файл {station.csv_path} не найден"
-    except Exception as e:
-        print(f"Ошибка при чтении файла: {e}")
-        return f"Ошибка: Не удалось прочитать файл {station.csv_path}"
-
-    # Проверяем необходимые колонки
-    required_columns = ['dt_time', 'Wind_dir', 'wind_speed', 'precipitation']
-    missing_columns = [col for col in required_columns if col not in file_csv.columns]
-    if missing_columns:
-        print(f"Отсутствуют колонки: {missing_columns}")
-        return f"Ошибка: В файле отсутствуют колонки: {missing_columns}"
-
-    # Получение метаданных станции
     metadata = station.get_metadata()
-
-    # Поиск ближайшей доступной начальной даты
-    original_date_n = date_n
-    for i in range(8):
-        date_1 = date_n + time_1[i]
-        ind = file_csv.index[file_csv['dt_time'] == date_1].tolist()
-        if len(ind) != 0:
-            date_n = date_1
-            print(f"Начальная дата найдена: {date_n}")
-            break
-
-    # Поиск ближайшей доступной конечной даты
-    original_date_k = date_k
-    for i in range(7, -1, -1):
-        date_1 = date_k + time_1[i]
-        ind = file_csv.index[file_csv['dt_time'] == date_1].tolist()
-        if len(ind) != 0:
-            date_k = date_1
-            print(f"Конечная дата найдена: {date_k}")
-            break
-
-    # Находим индексы
-    index_n = file_csv.loc[file_csv['dt_time'] == date_n].index
-    index_k = file_csv.loc[file_csv['dt_time'] == date_k].index
-
-    # Проверка корректности индексов
-    if len(index_n) == 0 or len(index_k) == 0:
-        print("Не удалось найти указанные даты в данных")
-        return "Ошибка: Указанные даты не найдены в данных"
-
-    # Определяем правильный порядок среза (от начала к концу)
-    start_idx = min(index_n[0], index_k[0])
-    end_idx = max(index_n[0], index_k[0])
-
-    print(f"Индексы: start={start_idx}, end={end_idx}")
-
-    # Выбор среза данных между указанными датами
-    file_csv_daten_datek = file_csv.loc[start_idx:end_idx].copy()
-    print(f"Выбран срез данных: {len(file_csv_daten_datek)} записей")
-
-    # Создание DataFrame с нужными колонками
-    b_wind = pd.DataFrame()
-    b_wind['wd'] = file_csv_daten_datek['Wind_dir'].astype(str).str.strip()
-    b_wind['ws'] = pd.to_numeric(file_csv_daten_datek['wind_speed'], errors='coerce')
-    b_wind['sn'] = pd.to_numeric(file_csv_daten_datek['precipitation'], errors='coerce')
-
-    print(f"Исходных данных: {len(b_wind)} записей")
-    print(f"Направления ветра: {b_wind['wd'].unique()[:10]}...")
-    print(f"Скорости ветра: от {b_wind['ws'].min():.1f} до {b_wind['ws'].max():.1f} м/с")
-
-    # Подготовка данных (фильтрация)
-    b_wind = df_preparation(b_wind, snow, metel)
+    data = get_data_for_rose_of_wind(station, date_from, date_to, snow, metel)
 
     # Проверка, остались ли данные после фильтрации
-    if b_wind.empty:
+    if data.empty:
         print("Нет данных, соответствующих критериям фильтрации")
         return "Ошибка: Нет данных, соответствующих выбранным критериям"
 
+    print(f"Исходных данных: {len(data)} записей")
+    print(f"Направления ветра: {data['wd'].unique()[:10]}...")
+    print(f"Скорости ветра: от {data['ws'].min():.1f} до {data['ws'].max():.1f} м/с")
+
     # Статистический анализ - считаем абсолютные значения
-    res = b_wind.groupby(['ws', 'wd']).size().reset_index(name='count')
+    res = data.groupby(['ws', 'wd']).size().reset_index(name='count')
     total_count = res['count'].sum()
+
     print(f"Всего записей после фильтрации: {total_count}")
 
     # Создаем сводную таблицу с абсолютными значениями
@@ -367,7 +393,7 @@ def obr_file(station, date_n, date_k, snow, metel, r_n, doc_name):
         print(f"Сумма итоговой строки: {total_row_sum:.1f}%")
 
     # Построение розы ветров
-    wind_rose(b_wind, station, r_n, False, total_count)
+    wind_rose(data, station, r_n, False, total_count)
 
     # Формирование описания условий
     if snow:
@@ -380,7 +406,7 @@ def obr_file(station, date_n, date_k, snow, metel, r_n, doc_name):
     else:
         sn = sn + 'независимо от скорости ветра.'
 
-    region = f"{metadata[1]}. Данные с {date_n} по {date_k}\n{sn}"
+    region = f"{metadata[1]}. Данные с {date_from} по {date_to}\n{sn}"
 
     # Генерация Word документа
     pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, station.city_name, total_count, doc_name)
