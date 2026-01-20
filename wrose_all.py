@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
 
+from datetime import date
+
 import wind_plot
 import os
 
@@ -118,16 +120,16 @@ class MeteostationsIndex:
         self._statusbar = statusbar
 
         # TODO: make private
-        self.qcombobox = QtWidgets.QComboBox(self._centralwidget)
-        self.qcombobox.setGeometry(QtCore.QRect(10, 110, 261, 41))
-        self.qcombobox.setStyleSheet("""
+        self._qcombobox = QtWidgets.QComboBox(self._centralwidget)
+        self._qcombobox.setGeometry(QtCore.QRect(10, 110, 261, 41))
+        self._qcombobox.setStyleSheet("""
             background-color: rgb(255, 255, 255);
             color: rgb(0, 0, 0);
         """)
-        self.qcombobox.setObjectName(
+        self._qcombobox.setObjectName(
             "meteostation",
         )
-        self.qcombobox.setToolTip(
+        self._qcombobox.setToolTip(
             'Выберите метеостанцию из списка загруженных',
         )
 
@@ -138,12 +140,15 @@ class MeteostationsIndex:
 
         self._add_item_dialog = MeteostationLoaderDialog(self._centralwidget)
 
-        self.qcombobox.addItems(
+        self._qcombobox.addItems(
             [item.city_name for item in self._stations],
         )
 
+    def widgets(self) -> list[QWidget]:
+        return [self._qcombobox]
+
     def get_current_selected_station(self) -> wind_plot.WeatherStation | None:
-        selected_index = self.qcombobox.currentIndex()
+        selected_index = self._qcombobox.currentIndex()
 
         if selected_index < 0 or selected_index > len(self._stations):
             return None
@@ -151,13 +156,13 @@ class MeteostationsIndex:
         return self._stations[selected_index]
 
     def remove_current_selected_station(self):
-        selected_index = self.qcombobox.currentIndex()
+        selected_index = self._qcombobox.currentIndex()
 
         if selected_index < 0 or selected_index > len(self._stations):
             return
 
         self._stations.pop(selected_index)
-        self.qcombobox.removeItem(selected_index)
+        self._qcombobox.removeItem(selected_index)
 
     def get_current_stations(self) -> list[wind_plot.WeatherStation]:
         return self._stations
@@ -177,7 +182,7 @@ class MeteostationsIndex:
 
             self._stations.append(station)
 
-            self.qcombobox.addItem(data.city_name)
+            self._qcombobox.addItem(data.city_name)
 
             QMessageBox.information(
                 self._centralwidget,
@@ -226,6 +231,206 @@ class MeteostationsIndex:
             self._statusbar.showMessage("Станция удалена", 3000)
 
 
+def make_file_name_from_station(station: wind_plot.WeatherStation) -> str:
+    return f'Роза ветров в {station.city_name}. График и таблица.docx'
+
+@dataclass
+class RoseOfWindFormResult:
+    date_from: date
+    date_to: date
+    has_snow: bool
+    has_wind_over_3m_per_s: bool
+    meteostation: wind_plot.WeatherStation
+    type_of_rose: int
+    type_of_rose_str: str
+
+
+class RoseOfWindForm:
+    def __init__(
+        self,
+        centralwidget: QWidget,
+        meteostations: MeteostationsIndex,
+    ):
+        self._centralwidget = centralwidget
+
+        self.meteostation = meteostations
+
+        # Выбор типа розы ветров
+        self._rose_of_wind_type_widget = QtWidgets.QComboBox(
+            self._centralwidget,
+        )
+        self._rose_of_wind_type_widget.setGeometry(
+            QtCore.QRect(10, 170, 261, 41),
+        )
+        self._rose_of_wind_type_widget.setStyleSheet("""
+                    background-color: rgb(255, 255, 255);
+                    color: rgb(0, 0, 0);
+                """)
+        self._rose_of_wind_type_widget.setObjectName("comboBox")
+        self._rose_of_wind_type_widget.addItem(
+            "Роза ветров цветная",
+        )
+        self._rose_of_wind_type_widget.addItem(
+            "Роза ветров черно-белая",
+        )
+        self._rose_of_wind_type_widget.addItem(
+            "Роза ветров контур",
+        )
+        self._rose_of_wind_type_widget.setToolTip(
+            'Выберите представление розы ветров',
+        )
+
+        # Чекбоксы для условий
+        self._has_snow_widget = QtWidgets.QCheckBox(
+            self._centralwidget,
+        )
+        self._has_snow_widget.setGeometry(
+            QtCore.QRect(300, 330, 81, 21)
+                                          )
+        self._has_snow_widget.setObjectName(
+            "checkBox",
+        )
+        self._has_snow_widget.setText(
+            "Снег",
+        )
+        self._has_snow_widget.setToolTip(
+            'Учитывать только случаи с осадками в виде снега',
+        )
+
+        self._has_wind_over_3m_per_s_widget = QtWidgets.QCheckBox(
+            self._centralwidget,
+        )
+        self._has_wind_over_3m_per_s_widget.setGeometry(
+            QtCore.QRect(300, 370, 141, 20),
+        )
+        self._has_wind_over_3m_per_s_widget.setObjectName(
+            "checkBox_2",
+        )
+        self._has_wind_over_3m_per_s_widget.setText(
+            "Ветер ≥3 м/с",
+        )
+        self._has_wind_over_3m_per_s_widget.setToolTip(
+            'Учитывать только случаи со скоростью ветра 3 м/с и более',
+        )
+
+        # Начальная дата
+
+        self._date_from_label = QtWidgets.QLabel(
+            self._centralwidget,
+        )
+        self._date_from_label.setGeometry(
+            QtCore.QRect(280, 440, 191, 31),
+        )
+        self._date_from_label.setStyleSheet("""
+            background-color: transparent;
+            color: rgb(0, 0, 0);
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        self._date_from_label.setObjectName("label")
+        self._date_from_label.setText("Выберите начальную дату")
+
+        self._date_from_widget = QtWidgets.QDateEdit(self._centralwidget)
+        self._date_from_widget.setGeometry(QtCore.QRect(280, 470, 194, 22))
+        self._date_from_widget.setStyleSheet("""
+            background-color: rgb(255, 255, 255);
+            color: rgb(0, 0, 0);
+        """)
+        self._date_from_widget.setObjectName("n_data")
+        self._date_from_widget.setMinimumDate(QtCore.QDate(2006, 9, 1))
+        self._date_from_widget.setMaximumDate(QtCore.QDate(2024, 9, 1))
+        self._date_from_widget.setToolTip('Начальная дата для расчета')
+
+        # Конечная дата
+        self._date_to_label = QtWidgets.QLabel(
+            self._centralwidget,
+        )
+        self._date_to_label.setGeometry(
+            QtCore.QRect(280, 490, 191, 31),
+        )
+        self._date_to_label.setStyleSheet("""
+            background-color: transparent;
+            color: rgb(0, 0, 0);
+            font-weight: bold;
+            font-size: 14px;
+        """)
+        self._date_to_label.setObjectName(
+            "label_2",
+        )
+        self._date_to_label.setText(
+            "Выберите конечную дату",
+        )
+
+        self._date_to_widget = QtWidgets.QDateEdit(self._centralwidget)
+        self._date_to_widget.setGeometry(QtCore.QRect(280, 520, 194, 22))
+        self._date_to_widget.setStyleSheet("""
+            background-color: rgb(255, 255, 255);
+            color: rgb(0, 0, 0);
+        """)
+        self._date_to_widget.setObjectName("k_data")
+        self._date_to_widget.setMinimumDate(QtCore.QDate(2010, 8, 31))
+        self._date_to_widget.setMaximumDate(QtCore.QDate(2025, 8, 31))
+        self._date_to_widget.setToolTip('Конечная дата для расчета')
+
+    def widgets(self) -> list[QWidget]:
+        return [
+            self._rose_of_wind_type_widget,
+            self._has_snow_widget,
+            self._has_wind_over_3m_per_s_widget,
+            self._date_from_label,
+            self._date_from_widget,
+            self._date_to_label,
+            self._date_to_widget,
+        ]
+
+    def query_data(self) -> RoseOfWindFormResult:
+        # Проверка наличия станций
+        if not self.meteostation.get_current_stations():
+            raise ValueError("no uploaded meteostations")
+
+        # Получение выбранной станции
+        station = self.meteostation.get_current_selected_station()
+        if not station:
+            raise ValueError("no meteostation not selected")
+
+        # Получение параметров
+        has_snow = self._has_snow_widget.isChecked()  # Снег
+        has_wind_over_3m_per_s = self._has_wind_over_3m_per_s_widget.isChecked()  # Ветер ≥3 м/с
+
+        # Получение дат
+        date_from = self._date_from_widget.date().toPyDate()
+        date_to = self._date_to_widget.date().toPyDate()
+
+        # Проверка дат
+        if date_from > date_to:
+            raise ValueError("date from if after date to")
+
+        # Словарь для типов розы ветров
+        rose_types = {
+            "Роза ветров черно-белая": 0,
+            "Роза ветров цветная": 1,
+            "Роза ветров контур": 2
+        }
+
+        # Получение типа розы ветров
+        rose_type_str = self._rose_of_wind_type_widget.currentText()
+
+        rose_type = rose_types.get(
+            rose_type_str,
+            1,
+        )
+
+        return RoseOfWindFormResult(**{
+            "date_from": date_from,
+            "date_to": date_to,
+            "has_snow": has_snow,
+            "has_wind_over_3m_per_s": has_wind_over_3m_per_s,
+            "meteostation": station,
+            "type_of_rose": rose_type,
+            "type_of_rose_str": rose_type_str,
+        })
+
+
 class Ui_ROSA_VETROV(object):
     QToolTip.setFont(QFont('TimesNewRoman', 10))
 
@@ -258,34 +463,58 @@ class Ui_ROSA_VETROV(object):
         self.statusbar.setObjectName("statusbar")
         ROSA_VETROV.setStatusBar(self.statusbar)
 
+        self.meteostation = MeteostationsIndex(
+            self.centralwidget,
+            self.statusbar,
+            default_stations,
+        )
+
+        self.rose_of_wind_form = RoseOfWindForm(
+            self.centralwidget,
+            self.meteostation,
+        )
+
         # Кнопка загрузки CSV файла
-        self.load_csv_button = QtWidgets.QPushButton(self.centralwidget)
-        self.load_csv_button.setGeometry(QtCore.QRect(10, 10, 261, 41))
-        self.load_csv_button.setStyleSheet("""
+        self.add_meteostation_from_csv_button = QtWidgets.QPushButton(
+            self.centralwidget,
+        )
+        self.add_meteostation_from_csv_button.setGeometry(
+            QtCore.QRect(10, 10, 261, 41),
+        )
+        self.add_meteostation_from_csv_button.setStyleSheet("""
             background-color: rgb(100, 150, 255);
             color: rgb(255, 255, 255);
             font-weight: bold;
         """)
-        self.load_csv_button.setObjectName("load_csv_button")
-        self.load_csv_button.setText("Загрузить CSV файл")
-        self.load_csv_button.setToolTip('Загрузить CSV файл с данными метеостанции')
+        self.add_meteostation_from_csv_button.setObjectName(
+            "load_csv_button",
+        )
+        self.add_meteostation_from_csv_button.setText(
+            "Загрузить CSV файл",
+        )
+        self.add_meteostation_from_csv_button.setToolTip(
+            'Загрузить CSV файл с данными метеостанции',
+        )
 
         # Кнопка удаления выбранной станции
-        self.remove_station_button = QtWidgets.QPushButton(self.centralwidget)
-        self.remove_station_button.setGeometry(QtCore.QRect(10, 60, 261, 41))
-        self.remove_station_button.setStyleSheet("""
+        self.remove_meteostation_button = QtWidgets.QPushButton(
+            self.centralwidget,
+        )
+        self.remove_meteostation_button.setGeometry(
+            QtCore.QRect(10, 60, 261, 41),
+        )
+        self.remove_meteostation_button.setStyleSheet("""
             background-color: rgb(255, 100, 100);
             color: rgb(255, 255, 255);
             font-weight: bold;
         """)
-        self.remove_station_button.setObjectName("remove_station_button")
-        self.remove_station_button.setText("Удалить выбранную станцию")
-        self.remove_station_button.setToolTip('Удалить выбранную метеостанцию из списка')
-
-        self.meteostation = MeteostationsIndex(
-            self.centralwidget,
-            self.statusbar,
-            self.stations,
+        self.remove_meteostation_button.setObjectName(
+            "remove_station_button")
+        self.remove_meteostation_button.setText(
+            "Удалить выбранную станцию",
+        )
+        self.remove_meteostation_button.setToolTip(
+            'Удалить выбранную метеостанцию из списка',
         )
 
         # Кнопка расчета
@@ -301,72 +530,12 @@ class Ui_ROSA_VETROV(object):
         self.start_calc.setText("РАСЧЕТ")
         self.start_calc.setToolTip('Будет произведен расчет для выбранных условий')
 
-        # Метки для дат
-        self.label = QtWidgets.QLabel(self.centralwidget)
-        self.label.setGeometry(QtCore.QRect(280, 440, 191, 31))
-        self.label.setStyleSheet("""
-            background-color: transparent;
-            color: rgb(0, 0, 0);
-            font-weight: bold;
-            font-size: 14px;
-        """)
-        self.label.setObjectName("label")
-        self.label.setText("Выберите начальную дату")
-
-        self.label_2 = QtWidgets.QLabel(self.centralwidget)
-        self.label_2.setGeometry(QtCore.QRect(280, 490, 191, 31))
-        self.label_2.setStyleSheet("""
-            background-color: transparent;
-            color: rgb(0, 0, 0);
-            font-weight: bold;
-            font-size: 14px;
-        """)
-        self.label_2.setObjectName("label_2")
-        self.label_2.setText("Выберите конечную дату")
-
-        # Выбор типа розы ветров
-        self.comboBox = QtWidgets.QComboBox(self.centralwidget)
-        self.comboBox.setGeometry(QtCore.QRect(10, 170, 261, 41))
-        self.comboBox.setStyleSheet("""
-                    background-color: rgb(255, 255, 255);
-                    color: rgb(0, 0, 0);
-                """)
-        self.comboBox.setObjectName("comboBox")
-        self.comboBox.addItem("Роза ветров цветная")
-        self.comboBox.addItem("Роза ветров черно-белая")
-        self.comboBox.addItem("Роза ветров контур")
-        self.comboBox.setToolTip('Выберите представление розы ветров')
-
         # Область для графика
         self.graphicsView = QtWidgets.QGraphicsView(self.centralwidget)
         self.graphicsView.setGeometry(QtCore.QRect(390, 50, 331, 301))
         self.graphicsView.setStyleSheet("background-color: rgb(255, 255, 255);")
         self.graphicsView.setObjectName("graphicsView")
         self.graphicsView.setToolTip('Здесь будет представлен график розы ветров')
-
-        # Начальная дата
-        self.n_data = QtWidgets.QDateEdit(self.centralwidget)
-        self.n_data.setGeometry(QtCore.QRect(280, 470, 194, 22))
-        self.n_data.setStyleSheet("""
-            background-color: rgb(255, 255, 255);
-            color: rgb(0, 0, 0);
-        """)
-        self.n_data.setObjectName("n_data")
-        self.n_data.setMinimumDate(QtCore.QDate(2006, 9, 1))
-        self.n_data.setMaximumDate(QtCore.QDate(2024, 9, 1))
-        self.n_data.setToolTip('Начальная дата для расчета')
-
-        # Конечная дата
-        self.k_data = QtWidgets.QDateEdit(self.centralwidget)
-        self.k_data.setGeometry(QtCore.QRect(280, 520, 194, 22))
-        self.k_data.setStyleSheet("""
-            background-color: rgb(255, 255, 255);
-            color: rgb(0, 0, 0);
-        """)
-        self.k_data.setObjectName("k_data")
-        self.k_data.setMinimumDate(QtCore.QDate(2010, 8, 31))
-        self.k_data.setMaximumDate(QtCore.QDate(2025, 8, 31))
-        self.k_data.setToolTip('Конечная дата для расчета')
 
         # Область для условий расчета
         self.r_cond = QtWidgets.QLabel(self.centralwidget)
@@ -391,19 +560,6 @@ class Ui_ROSA_VETROV(object):
         self.exit_program.setObjectName("exit_program")
         self.exit_program.setText("ВЫХОД")
 
-        # Чекбоксы для условий
-        self.checkBox = QtWidgets.QCheckBox(self.centralwidget)
-        self.checkBox.setGeometry(QtCore.QRect(300, 330, 81, 21))
-        self.checkBox.setObjectName("checkBox")
-        self.checkBox.setText("Снег")
-        self.checkBox.setToolTip('Учитывать только случаи с осадками в виде снега')
-
-        self.checkBox_2 = QtWidgets.QCheckBox(self.centralwidget)
-        self.checkBox_2.setGeometry(QtCore.QRect(300, 370, 141, 20))
-        self.checkBox_2.setObjectName("checkBox_2")
-        self.checkBox_2.setText("Ветер ≥3 м/с")
-        self.checkBox_2.setToolTip('Учитывать только случаи со скоростью ветра 3 м/с и более')
-
         # Название розы ветров
         self.rose_name = QtWidgets.QLabel(self.centralwidget)
         self.rose_name.setGeometry(QtCore.QRect(394, 10, 321, 20))
@@ -418,21 +574,17 @@ class Ui_ROSA_VETROV(object):
 
         # Поднимаем все виджеты наверх (чтобы не перекрывались)
         widgets = [
-            self.load_csv_button,
-            self.remove_station_button,
-            self.meteostation.qcombobox,
+            *self.meteostation.widgets(),
+            *self.rose_of_wind_form.widgets(),
+
+            self.add_meteostation_from_csv_button,
+            self.remove_meteostation_button,
+            self.meteostation._qcombobox,
             self.start_calc,
-            self.label,
-            self.label_2,
-            self.comboBox,
             self.graphicsView,
-            self.n_data,
-            self.k_data,
             self.r_cond,
             self.exit_program,
-            self.checkBox,
-            self.checkBox_2,
-            self.rose_name
+            self.rose_name,
         ]
 
         for widget in widgets:
@@ -487,8 +639,8 @@ class Ui_ROSA_VETROV(object):
         """Подключение сигналов к слотам"""
         self.start_calc.clicked.connect(self.equal)
         self.exit_program.clicked.connect(app.quit)
-        self.load_csv_button.clicked.connect(self.meteostation.handle_add_station)
-        self.remove_station_button.clicked.connect(self.meteostation.handle_remove_station)
+        self.add_meteostation_from_csv_button.clicked.connect(self.meteostation.handle_add_station)
+        self.remove_meteostation_button.clicked.connect(self.meteostation.handle_remove_station)
         self.action_load_csv.triggered.connect(self.meteostation.handle_add_station)
         self.action_exit.triggered.connect(app.quit)
         self.action_about.triggered.connect(self.show_about)
@@ -514,99 +666,79 @@ class Ui_ROSA_VETROV(object):
         """Основная функция расчета"""
         print("Начало расчета...")
 
-        # Проверка наличия станций
-        if not self.meteostation.get_current_stations():
-            self.r_cond.setText("Ошибка: Нет загруженных метеостанций.\n"
-                                "Загрузите CSV файл с данными.")
-            return
-
-        # Получение выбранной станции
-        station = self.meteostation.get_current_selected_station()
-        if not station:
-            self.r_cond.setText("Ошибка: Выберите метеостанцию из списка.")
-            return
-
-        # Обновление названия в интерфейсе
-        s = f"{station.city_name}: {self.comboBox.currentText()}"
-        self.rose_name.setText(s)
-
-        # Получение параметров
-        a = self.checkBox.isChecked()  # Снег
-        b = self.checkBox_2.isChecked()  # Ветер ≥3 м/с
-
-        # Проверка дат
-        if self.n_data.date().toString('yyyy.MM.dd') > self.k_data.date().toString('yyyy.MM.dd'):
-            self.r_cond.setText('Ошибка: Конечная дата меньше начальной')
-            return
-
-        # Получение дат
-        date_n = self.n_data.date().toString('dd.MM.yyyy')
-        date_k = self.k_data.date().toString('dd.MM.yyyy')
-
-        # Формирование строки условий
-        s_r = 'Расчеты проводятся для: \n' + 'метеостанции: ' + \
-              station.city_name + '\n'
-        s_r = s_r + 'c ' + date_n + ' по ' + date_k + ' \n'
-
-        if a:
-            s_1 = 'при наличии осадков в виде снега \n'
-        else:
-            s_1 = 'независимо от осадков \n'
-
-        if b:
-            s_1 = s_1 + 'и при ветре 3 и более м/с \n'
-        else:
-            s_1 = s_1 + 'независимо от скорости ветра \n'
-
-        s_r = s_r + s_1
-
-        # Словарь для типов розы ветров
-        di = {
-            "Роза ветров черно-белая": 0,
-            "Роза ветров цветная": 1,
-            "Роза ветров контур": 2
-        }
-
-        # Получение типа розы ветров
-        rose_type = di.get(self.comboBox.currentText(), 1)
-
-        # Выполнение расчета
         try:
-            file_name = wind_plot.obr_file(
-                station,
-                date_n, date_k, a, b,
-                rose_type
-            )
+            data = self.rose_of_wind_form.query_data()
 
-            s_r = s_r + 'Роза ветров и таблица сохранены в файле: \n' + file_name
-            self.r_cond.setText(s_r)
+            # Обновление названия в интерфейсе
+            s = f"{data.meteostation.city_name}: {data.type_of_rose_str}"
+            self.rose_name.setText(s)
 
-            # Отображение графика
-            metadata = station.get_metadata()
-            image_path = metadata[3] + '.jpg'
+            save_to = make_file_name_from_station(data.meteostation)
 
-            if os.path.exists(image_path):
-                pix = QPixmap(image_path)
-                pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
-                item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
+            # Формирование строки условий
+            s_r = 'Расчеты проводятся для: \n' + \
+                'метеостанции: ' + data.meteostation.city_name + '\n' \
+                'c ' + data.date_from.strftime("%d.%m.%Y") + \
+                ' по ' + data.date_to.strftime("%d.%m.%Y") + ' \n'
 
-                scene = QtWidgets.QGraphicsScene()
-                scene.addItem(item)
-                self.graphicsView.setScene(scene)
+            if data.has_snow:
+                s_1 = 'при наличии осадков в виде снега \n'
             else:
-                self.r_cond.setText(s_r + '\n\nВнимание: График не найден!')
+                s_1 = 'независимо от осадков \n'
 
-        except FileNotFoundError as e:
-            self.r_cond.setText(f'Ошибка: Файл не найден\n{str(e)}')
-        except pd.errors.EmptyDataError:
-            self.r_cond.setText('Ошибка: CSV файл пуст или содержит некорректные данные')
-        except KeyError as e:
-            self.r_cond.setText(f'Ошибка: В CSV файле отсутствуют необходимые колонки\n{str(e)}')
-        except Exception as e:
-            self.r_cond.setText(f'Ошибка при выполнении расчета:\n{str(e)}')
-            print(f"Ошибка: {e}")
-            import traceback
-            traceback.print_exc()
+            if data.has_wind_over_3m_per_s:
+                s_1 = s_1 + 'и при ветре 3 и более м/с \n'
+            else:
+                s_1 = s_1 + 'независимо от скорости ветра \n'
+
+            s_r = s_r + s_1
+
+            s_r = s_r + 'Роза ветров и таблица сохранены в файле: \n' + save_to
+
+            # Выполнение расчета
+            try:
+                wind_plot.obr_file(
+                    data.meteostation,
+                    data.date_from.strftime("%d.%m.%Y"),
+                    data.date_to.strftime("%d.%m.%Y"),
+                    data.has_snow,
+                    data.has_wind_over_3m_per_s,
+                    data.type_of_rose,
+                    save_to,
+                )
+
+                self.r_cond.setText(s_r)
+
+                # Отображение графика
+                metadata = data.meteostation.get_metadata()
+                image_path = metadata[3] + '.jpg'
+
+                if os.path.exists(image_path):
+                    pix = QPixmap(image_path)
+                    pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
+                    item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
+
+                    scene = QtWidgets.QGraphicsScene()
+                    scene.addItem(item)
+                    self.graphicsView.setScene(scene)
+                else:
+                    self.r_cond.setText(s_r + '\n\nВнимание: График не найден!')
+
+            except FileNotFoundError as e:
+                self.r_cond.setText(f'Ошибка: Файл не найден\n{str(e)}')
+
+            except pd.errors.EmptyDataError:
+                self.r_cond.setText('Ошибка: CSV файл пуст или содержит некорректные данные')
+
+            except KeyError as e:
+                self.r_cond.setText(f'Ошибка: В CSV файле отсутствуют необходимые колонки\n{str(e)}')
+
+            except Exception as e:
+                self.r_cond.setText(f'Ошибка при выполнении расчета:\n{str(e)}')
+                print(f"Ошибка: {e}")
+
+        except BaseException as e:
+            self.r_cond.setText(str(e))
 
 
 if __name__ == "__main__":
@@ -640,7 +772,7 @@ if __name__ == "__main__":
     # Установка иконки (если есть)
     try:
         app.setWindowIcon(QtGui.QIcon('wind_rose_icon.png'))
-    except:
+    except BaseException:
         pass
 
     # Показ окна

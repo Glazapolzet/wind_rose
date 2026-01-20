@@ -222,7 +222,7 @@ def wind_rose(b_w, station, r_n, nw=False, total_count=None):
     return
 
 
-def obr_file(station, date_n, date_k, snow, metel, r_n):
+def obr_file(station, date_n, date_k, snow, metel, r_n, doc_name):
     """Основная функция обработки данных и генерации отчетов"""
     print(f"Обработка файла: {station.csv_path}")
     print(f"Период: с {date_n} по {date_k}")
@@ -383,12 +383,10 @@ def obr_file(station, date_n, date_k, snow, metel, r_n):
     region = f"{metadata[1]}. Данные с {date_n} по {date_k}\n{sn}"
 
     # Генерация Word документа
-    file_name = pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, station.city_name, total_count)
-
-    return file_name
+    pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, station.city_name, total_count, doc_name)
 
 
-def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total_count):
+def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total_count, doc_name):
     """Создание Word документа с таблицей и графиком"""
     print('Создание Word документа...')
 
@@ -569,14 +567,7 @@ def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total
 
     # Сохранение документа
     try:
-        doc_name = f'Роза ветров в {city_name}. График и таблица.docx'
         document.save(doc_name)
-        file_name = f'{doc_name} сохранен'
         print(f"Документ сохранен: {doc_name}")
     except Exception as e:
         print(f"Ошибка при сохранении документа: {e}")
-        doc_name = f'Роза ветров в {city_name}. График и таблица1.docx'
-        document.save(doc_name)
-        file_name = f'{doc_name} сохранен (резервная копия)'
-
-    return file_name
