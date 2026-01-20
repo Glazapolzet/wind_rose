@@ -431,6 +431,27 @@ class RoseOfWindForm:
         })
 
 
+def make_rose_of_wind_form_description(
+    data: RoseOfWindFormResult,
+    save_to: str,
+) -> str:
+    return "\n".join(
+        [
+            'Расчеты проводятся для:',
+            f'метеостанции: {data.meteostation.city_name}',
+            f'с: {data.date_from.strftime("%d.%m.%Y")}',
+            f'по: {data.date_to.strftime("%d.%m.%Y")}',
+
+            'при наличии осадков в виде снега' if data.has_snow
+            else 'независимо от осадков',
+
+            'и при ветре 3 и более м/с' if data.has_wind_over_3m_per_s
+            else 'независимо от скорости ветра',
+
+            f'Роза ветров и таблица сохранены в файле: {save_to}'
+        ]
+    )
+
 class Ui_ROSA_VETROV(object):
     QToolTip.setFont(QFont('TimesNewRoman', 10))
 
@@ -674,26 +695,7 @@ class Ui_ROSA_VETROV(object):
             self.rose_name.setText(s)
 
             save_to = make_file_name_from_station(data.meteostation)
-
-            # Формирование строки условий
-            s_r = 'Расчеты проводятся для: \n' + \
-                'метеостанции: ' + data.meteostation.city_name + '\n' \
-                'c ' + data.date_from.strftime("%d.%m.%Y") + \
-                ' по ' + data.date_to.strftime("%d.%m.%Y") + ' \n'
-
-            if data.has_snow:
-                s_1 = 'при наличии осадков в виде снега \n'
-            else:
-                s_1 = 'независимо от осадков \n'
-
-            if data.has_wind_over_3m_per_s:
-                s_1 = s_1 + 'и при ветре 3 и более м/с \n'
-            else:
-                s_1 = s_1 + 'независимо от скорости ветра \n'
-
-            s_r = s_r + s_1
-
-            s_r = s_r + 'Роза ветров и таблица сохранены в файле: \n' + save_to
+            description = make_rose_of_wind_form_description(data, save_to)
 
             # Выполнение расчета
             try:
@@ -707,22 +709,22 @@ class Ui_ROSA_VETROV(object):
                     save_to,
                 )
 
-                self.r_cond.setText(s_r)
+                self.r_cond.setText(description)
 
                 # Отображение графика
                 metadata = data.meteostation.get_metadata()
                 image_path = metadata[3] + '.jpg'
 
-                if os.path.exists(image_path):
-                    pix = QPixmap(image_path)
-                    pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
-                    item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
+                if not os.path.exists(image_path):
+                    raise FileNotFoundError("plot not found")
 
-                    scene = QtWidgets.QGraphicsScene()
-                    scene.addItem(item)
-                    self.graphicsView.setScene(scene)
-                else:
-                    self.r_cond.setText(s_r + '\n\nВнимание: График не найден!')
+                pix = QPixmap(image_path)
+                pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
+                item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
+
+                scene = QtWidgets.QGraphicsScene()
+                scene.addItem(item)
+                self.graphicsView.setScene(scene)
 
             except FileNotFoundError as e:
                 self.r_cond.setText(f'Ошибка: Файл не найден\n{str(e)}')
