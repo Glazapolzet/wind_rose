@@ -71,8 +71,8 @@ def df_preparation(b_w, snow=True, metel=True):
     return b_w
 
 
-def wind_rose(b_w, station, r_n, nw=False):
-    """Построение розы ветров"""
+def wind_rose(b_w, station, r_n, nw=False, total_count=None):
+    """Построение розы ветров с правильными процентами из данных"""
     print("Построение розы ветров...")
     
     # Словарь для преобразования направлений ветра в градусы
@@ -126,9 +126,90 @@ def wind_rose(b_w, station, r_n, nw=False):
     # Добавляем легенду с процентами
     ax.set_legend(title='Скорость ветра, м/с', loc='center left', bbox_to_anchor=(1.1, 0.5))
     
-    # Настраиваем отображение процентов на кругах
-    ax.set_yticks(np.linspace(0, ax.get_ylim()[1], 5))
-    ax.set_yticklabels([f'{int(x)}%' for x in np.linspace(0, 100, 5)])
+    # ВЫЧИСЛЯЕМ РЕАЛЬНЫЕ ПРОЦЕНТЫ ИЗ ДАННЫХ ДЛЯ КРУГОВ
+    
+    # 1. Сначала получаем распределение данных по направлениям
+    direction_counts = {}
+    for direction in w_dir.values():
+        # Считаем количество записей для каждого направления
+        direction_data = b_w[b_w['wd'] == direction]
+        direction_counts[direction] = len(direction_data)
+    
+    # 2. Находим максимальный процент среди всех направлений
+    if total_count is None:
+        total_count = len(b_w)
+    
+    max_percentage = 0
+    for direction, count in direction_counts.items():
+        percentage = (count / total_count * 100) if total_count > 0 else 0
+        if percentage > max_percentage:
+            max_percentage = percentage
+    
+    print(f"Максимальный процент среди направлений: {max_percentage:.1f}%")
+    print(f"Общее количество данных: {total_count}")
+
+    # 3. Настраиваем круги на основе реальных данных
+    # Всегда используем 4 кольца
+    circle_count = 4
+
+    # Стандартные относительные позиции: 0.25, 0.5, 0.75, 1.0 (25%, 50%, 75%, 100%)
+    standard_positions = np.array([0.25, 0.5, 0.75, 1.0])
+
+    # Вычисляем фактические значения процентов на основе максимального
+    if max_percentage > 0:
+        # Масштабируем стандартные позиции под наши данные
+        circle_values = standard_positions * max_percentage
+    else:
+        # Дефолтные значения, если нет данных
+        circle_values = np.array([5, 10, 15, 20])
+
+    # Округляем значения кругов
+    circle_values = np.round(circle_values, 1)
+
+    # Убеждаемся, что последнее кольцо соответствует максимальному проценту
+    circle_values[-1] = max_percentage
+
+    # Преобразуем проценты в позиции на графике
+    ylim = ax.get_ylim()
+    max_radius = ylim[1]
+
+    if max_radius <= 0:
+        max_radius = 1.0
+
+    # Позиции кругов пропорциональны стандартным позициям
+    circle_positions = standard_positions * max_radius
+
+    # Устанавливаем круги
+    ax.set_yticks(circle_positions)
+
+    # Создаем метки для кругов
+    circle_labels = []
+    for value in circle_values:
+        if value < 0.1:
+            circle_labels.append(f'{value:.2f}%')
+        elif value < 1:
+            circle_labels.append(f'{value:.1f}%')
+        else:
+            if value.is_integer():
+                circle_labels.append(f'{int(value)}%')
+            else:
+                circle_labels.append(f'{value:.1f}%')
+
+    ax.set_yticklabels(circle_labels, fontsize=11, fontweight='bold')
+    
+    # Устанавливаем круги
+    ax.set_yticks(circle_positions)
+    
+    # Создаем метки для кругов - проценты
+    circle_labels = [f'{value:.1f}%' for value in circle_values]
+    ax.set_yticklabels(circle_labels, fontsize=11, fontweight='bold')
+    
+    # # Добавляем процентные метки под кругами для ясности
+    # ax.text(0.02, 0.98, 'Проценты указаны\nна кругах',
+    #         transform=ax.transAxes,
+    #         fontsize=10,
+    #         verticalalignment='top',
+    #         bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8))
     
     # Сохранение графика
     metadata = station.get_metadata()
@@ -137,6 +218,7 @@ def wind_rose(b_w, station, r_n, nw=False):
     plt.close()
     
     print(f"Роза ветров сохранена как {metadata[3] + '.jpg'}")
+    print(f"Круги отображают проценты: {', '.join(circle_labels)}")
     return
 
 
@@ -237,6 +319,9 @@ def obr_file(station, date_n, date_k, snow, metel, r_n):
     pivot_abs = pd.pivot_table(res, values='count', index=['ws'],
                                columns=['wd'], aggfunc='sum', fill_value=0)
     
+    # ОКРУГЛЯЕМ АБСОЛЮТНЫЕ ЗНАЧЕНИЯ ДО 1 ЗНАКА ПОСЛЕ ЗАПЯТОЙ ПЕРЕД РАСЧЕТОМ ПРОЦЕНТОВ
+    pivot_abs = pivot_abs.round(1)
+    
     # Добавляем строку с итогами по направлениям
     direction_totals = pivot_abs.sum(axis=0)
     pivot_abs.loc['Всего'] = direction_totals
@@ -246,14 +331,29 @@ def obr_file(station, date_n, date_k, snow, metel, r_n):
     pivot_abs['Всего,%'] = (speed_totals / total_count * 100).round(1)
     
     # Преобразуем абсолютные значения в проценты для отображения
-    pivot_pct = (pivot_abs.iloc[:-1, :-1] / total_count * 100).round(1)
+    pivot_pct = (pivot_abs.iloc[:-1, :-1] / total_count * 100)
+    
+    # ИСПРАВЛЕНИЕ: Сначала округляем проценты, потом добавляем итоги
+    pivot_pct = pivot_pct.round(1)
+    
+    # УБИРАЕМ МИКРО-ЗНАЧЕНИЯ МЕНЬШЕ 0.05 (делаем их 0.0)
+    # Это решает проблему с 0.1 в строках, где все должно быть 0.0
+    pivot_pct = pivot_pct.applymap(lambda x: 0.0 if abs(x) < 0.05 else x)
     
     # Добавляем строку с итогами по направлениям (в процентах)
     direction_pct = (direction_totals / total_count * 100).round(1)
     pivot_pct.loc['Всего,%'] = direction_pct
     
     # Добавляем столбец с итогами по скоростям
-    pivot_pct['Всего,%'] = pivot_abs['Всего,%']
+    # Пересчитываем, чтобы избежать погрешностей округления
+    speed_pct_totals = pivot_pct.iloc[:-1, :].sum(axis=1)
+    pivot_pct['Всего,%'] = speed_pct_totals.round(1)
+    
+    # Исправляем NaN в последней ячейке (пересечение "Всего,%" и "Всего,%")
+    if 'Всего,%' in pivot_pct.index and 'Всего,%' in pivot_pct.columns:
+        # Сумма всех процентов должна быть 100% (с учетом округления)
+        total_sum = pivot_pct.iloc[:-1, :-1].sum().sum()
+        pivot_pct.loc['Всего,%', 'Всего,%'] = total_sum
     
     print("\nСводная таблица (проценты):")
     print(pivot_pct)
@@ -267,7 +367,7 @@ def obr_file(station, date_n, date_k, snow, metel, r_n):
         print(f"Сумма итоговой строки: {total_row_sum:.1f}%")
     
     # Построение розы ветров
-    wind_rose(b_wind, station, r_n, False)
+    wind_rose(b_wind, station, r_n, False, total_count)
     
     # Формирование описания условий
     if snow:
@@ -371,8 +471,8 @@ def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total
             for dir_code in available_directions:
                 if dir_code in pivot_pct.columns:
                     value = pivot_pct.loc[idx, dir_code]
-                    # Проверяем, что значение не NaN
-                    if pd.isna(value):
+                    # ИСПРАВЛЕНИЕ: Проверяем на микро-значения
+                    if pd.isna(value) or abs(value) < 0.05:
                         row_data[dir_code] = 0.0
                     else:
                         row_data[dir_code] = float(value)
@@ -385,7 +485,7 @@ def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total
     for dir_code in available_directions:
         if dir_code in pivot_pct.columns and 'Всего,%' in pivot_pct.index:
             value = pivot_pct.loc['Всего,%', dir_code]
-            if pd.isna(value):
+            if pd.isna(value) or abs(value) < 0.05:
                 totals_row[dir_code] = 0.0
             else:
                 totals_row[dir_code] = float(value)
@@ -431,8 +531,11 @@ def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total
         for j, dir_code in enumerate(directions_order):
             value = row_data.get(dir_code, 0.0)
             
-            # Форматируем значение
-            display_value = f"{value:.1f}" if value != 0 else "0.0"
+            # Форматируем значение - ИСПРАВЛЕНИЕ: показываем 0.0 для значений < 0.05
+            if abs(value) < 0.05:
+                display_value = "0.0"
+            else:
+                display_value = f"{value:.1f}" if value != 0 else "0.0"
             
             row_cells[j + 1].text = display_value
             row_cells[j + 1].paragraphs[0].paragraph_format.alignment = WD_TABLE_ALIGNMENT.RIGHT
@@ -440,7 +543,7 @@ def pivot_table_to_word(pivot_pct, pivot_abs, metadata, region, city_name, total
         # Заполняем последний столбец "Всего,%"
         if row_idx in pivot_pct.index and 'Всего,%' in pivot_pct.columns:
             total_value = pivot_pct.loc[row_idx, 'Всего,%']
-            if pd.isna(total_value):
+            if pd.isna(total_value) or abs(total_value) < 0.05:
                 row_cells[17].text = "0.0"
             else:
                 row_cells[17].text = f"{float(total_value):.1f}"
