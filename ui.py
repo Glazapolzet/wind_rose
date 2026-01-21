@@ -258,13 +258,16 @@ class RoseOfWindForm:
         self._has_snow_widget = QtWidgets.QCheckBox(
             self._centralwidget,
         )
-        self._has_snow_widget.setGeometry(QtCore.QRect(300, 330, 81, 21))
+        self._has_snow_widget.setGeometry(QtCore.QRect(550, 400, 120, 20))
         self._has_snow_widget.setObjectName(
             "checkBox",
         )
         self._has_snow_widget.setText(
             "Снег",
         )
+        self._has_snow_widget.setStyleSheet("""
+                    color: rgb(0, 0, 0);
+                """)
         self._has_snow_widget.setToolTip(
             "Учитывать только случаи с осадками в виде снега",
         )
@@ -273,7 +276,7 @@ class RoseOfWindForm:
             self._centralwidget,
         )
         self._has_wind_over_3m_per_s_widget.setGeometry(
-            QtCore.QRect(300, 370, 141, 20),
+            QtCore.QRect(400, 400, 120, 20),
         )
         self._has_wind_over_3m_per_s_widget.setObjectName(
             "checkBox_2",
@@ -281,6 +284,9 @@ class RoseOfWindForm:
         self._has_wind_over_3m_per_s_widget.setText(
             "Ветер ≥3 м/с",
         )
+        self._has_wind_over_3m_per_s_widget.setStyleSheet("""
+                            color: rgb(0, 0, 0);
+                        """)
         self._has_wind_over_3m_per_s_widget.setToolTip(
             "Учитывать только случаи со скоростью ветра 3 м/с и более",
         )
@@ -291,7 +297,7 @@ class RoseOfWindForm:
             self._centralwidget,
         )
         self._date_from_label.setGeometry(
-            QtCore.QRect(280, 440, 191, 31),
+            QtCore.QRect(400, 430, 190, 30),
         )
         self._date_from_label.setStyleSheet("""
             background-color: transparent;
@@ -303,7 +309,7 @@ class RoseOfWindForm:
         self._date_from_label.setText("Выберите начальную дату")
 
         self._date_from_widget = QtWidgets.QDateEdit(self._centralwidget)
-        self._date_from_widget.setGeometry(QtCore.QRect(280, 470, 194, 22))
+        self._date_from_widget.setGeometry(QtCore.QRect(400, 460, 195, 25))
         self._date_from_widget.setStyleSheet("""
             background-color: rgb(255, 255, 255);
             color: rgb(0, 0, 0);
@@ -318,7 +324,7 @@ class RoseOfWindForm:
             self._centralwidget,
         )
         self._date_to_label.setGeometry(
-            QtCore.QRect(280, 490, 191, 31),
+            QtCore.QRect(400, 490, 191, 31),
         )
         self._date_to_label.setStyleSheet("""
             background-color: transparent;
@@ -334,7 +340,7 @@ class RoseOfWindForm:
         )
 
         self._date_to_widget = QtWidgets.QDateEdit(self._centralwidget)
-        self._date_to_widget.setGeometry(QtCore.QRect(280, 520, 194, 22))
+        self._date_to_widget.setGeometry(QtCore.QRect(400, 520, 194, 22))
         self._date_to_widget.setStyleSheet("""
             background-color: rgb(255, 255, 255);
             color: rgb(0, 0, 0);
@@ -450,11 +456,14 @@ class Ui_ROSA_VETROV(object):
         self.app = main_window
 
         main_window.setObjectName("ROSA_VETROV")
-        main_window.resize(850, 650)  # Немного увеличили размер окна
+        main_window.resize(800, 630)  # Немного увеличили размер окна
         main_window.setStyleSheet("background-color: rgb(170, 255, 127);")
 
         self.centralwidget = QtWidgets.QWidget(main_window)
         self.centralwidget.setObjectName("centralwidget")
+        self.centralwidget.setStyleSheet("""
+                    color: rgb(0, 0, 0);
+                """)
         self.centralwidget.setToolTip(
             "Данная программа предназначена для формирования розы ветров.\n"
             "Вы можете загружать данные с любых метеостанций.\n"
@@ -525,24 +534,28 @@ class Ui_ROSA_VETROV(object):
 
         # Кнопка расчета
         self.start_calc = QtWidgets.QPushButton(self.centralwidget)
-        self.start_calc.setGeometry(QtCore.QRect(0, 480, 271, 101))
+        self.start_calc.setGeometry(QtCore.QRect(10, 480, 260, 60))
         self.start_calc.setStyleSheet("""
             background-color: rgb(100, 255, 100);
             color: rgb(0, 0, 0);
             font-weight: bold;
-            font-size: 14px;
+            font-size: 16px;
         """)
         self.start_calc.setObjectName("start_calc")
         self.start_calc.setText("РАСЧЕТ")
         self.start_calc.setToolTip(
-            "Будет произведен расчет для выбранных условий")
+            "Выполнить расчет для выбранных условий")
 
         # Область для графика
         self.graphicsView = QtWidgets.QGraphicsView(self.centralwidget)
-        self.graphicsView.setGeometry(QtCore.QRect(390, 50, 331, 301))
+        self.graphicsView.setGeometry(QtCore.QRect(400, 80, 350, 300))
         self.graphicsView.setStyleSheet(
             "background-color: rgb(255, 255, 255);")
         self.graphicsView.setObjectName("graphicsView")
+        self.graphicsView.setStyleSheet("""
+            background-color: rgb(255, 255, 255);
+            color: rgb(0, 0, 0);
+        """)
         self.graphicsView.setToolTip(
             "Здесь будет представлен график розы ветров")
 
@@ -560,18 +573,22 @@ class Ui_ROSA_VETROV(object):
 
         # Кнопка выхода
         self.exit_program = QtWidgets.QPushButton(self.centralwidget)
-        self.exit_program.setGeometry(QtCore.QRect(490, 480, 161, 81))
+        self.exit_program.setGeometry(QtCore.QRect(10, 550, 260, 60))
         self.exit_program.setStyleSheet("""
             background-color: rgb(255, 0, 0);
             color: rgb(255, 255, 255);
+            font-size: 16px;
             font-weight: bold;
         """)
         self.exit_program.setObjectName("exit_program")
         self.exit_program.setText("ВЫХОД")
+        self.exit_program.setToolTip(
+            "Выход из программы")
 
         # Название розы ветров
         self.rose_name = QtWidgets.QLabel(self.centralwidget)
-        self.rose_name.setGeometry(QtCore.QRect(394, 10, 321, 20))
+        self.rose_name.setGeometry(QtCore.QRect(400, 10, 350, 40))
+        self.rose_name.setWordWrap(True)
         self.rose_name.setStyleSheet("""
             background-color: rgb(255, 255, 255);
             color: rgb(0, 0, 0);
@@ -602,7 +619,7 @@ class Ui_ROSA_VETROV(object):
 
         # Меню и статусбар
         self.menubar = QtWidgets.QMenuBar(main_window)
-        self.menubar.setGeometry(QtCore.QRect(0, 0, 850, 26))
+        self.menubar.setGeometry(QtCore.QRect(0, 0, 850, 25))
         self.menubar.setObjectName("menubar")
 
         # Добавляем меню
@@ -640,7 +657,7 @@ class Ui_ROSA_VETROV(object):
         )
 
         self.rose_name.setText(
-            _translate("ROSA_VETROV", "Выберите метеостанцию и параметры"),
+            _translate("ROSA_VETROV", "Чтобы отобразить график розы ветров, выберите метеостанцию и параметры"),
         )
 
     def connect_handlers(self):
