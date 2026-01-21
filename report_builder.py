@@ -327,7 +327,7 @@ def _format_value(value: float) -> str:
     """Форматирует значение для отображения: 0.0 если < 0.05, иначе с 1 знаком."""
     if pd.isna(value) or abs(value) < 0.05:
         return "0.0"
-    return f"{value:.1f}"
+    return f"{value:.3f}"
 
 
 def _get_sorted_speeds(index: pd.Index) -> list:
