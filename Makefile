@@ -1,2 +1,2 @@
 run:
-	python -m wrose_all
+	python -m main
