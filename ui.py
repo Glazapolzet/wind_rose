@@ -17,6 +17,7 @@ from PyQt5.QtWidgets import (
 
 import report_builder
 import weather_station
+import preobr
 
 
 @dataclass
@@ -49,9 +50,9 @@ class MeteostationLoaderDialog:
         """Загрузка CSV файла с данными метеостанции"""
         file_path, ok = QFileDialog.getOpenFileName(
             self._centralwidget,
-            "Выберите CSV файл с данными метеостанции",
+            "Выберите CSV/XLS файл с данными метеостанции",
             "",
-            "CSV files (*.csv);;All files (*.*)",
+            "CSV files (*.csv);;XLS files (*.xls);;All files (*.*)",
         )
 
         if not ok or not file_path:
@@ -97,7 +98,6 @@ class MeteostationsIndex:
 
         self._statusbar = statusbar
 
-        # TODO: make private
         self._qcombobox = QtWidgets.QComboBox(self._centralwidget)
         self._qcombobox.setGeometry(QtCore.QRect(10, 110, 261, 41))
         self._qcombobox.setStyleSheet("""
@@ -149,34 +149,34 @@ class MeteostationsIndex:
         data, ok = self._add_item_dialog.query_data_safe()
         if not ok or not data:
             return
-
+    
         try:
-            # Создание объекта метеостанции
+            processed_csv_path = preobr.preprocess_file(data.file_path, data.city_name)
+        
+            # Создание объекта метеостанции из обработанного CSV
             station = weather_station.WeatherStation(
-                data.file_path,
+                processed_csv_path,
                 data.city_name,
                 data.city_case,
             )
-
+        
             self._stations.append(station)
-
             self._qcombobox.addItem(data.city_name)
-
+        
             QMessageBox.information(
                 self._centralwidget,
                 "Станция загружена",
-                f"Метеостанция '{data.city_name}' успешно загружена.",
+                f"Метеостанция '{data.city_name}' успешно загружена и обработана.",
             )
-
-            # Обновление статуса
+        
             self._statusbar.showMessage(
-                f"Загружена станция: {data.city_name}",
+                f"Загружена и обработана станция: {data.city_name}",
                 3000,
             )
-
+    
         except Exception as e:
             QMessageBox.critical(
-                self._centralwidget, "Ошибка", f"Не удалось загрузить файл: {str(e)}"
+                self._centralwidget, "Ошибка", f"Не удалось загрузить или обработать файл: {str(e)}"
             )
 
     def handle_remove_station(self):
@@ -316,7 +316,7 @@ class RoseOfWindForm:
         """)
         self._date_from_widget.setObjectName("n_data")
         self._date_from_widget.setMinimumDate(QtCore.QDate(2006, 9, 1))
-        self._date_from_widget.setMaximumDate(QtCore.QDate(2024, 9, 1))
+        # self._date_from_widget.setMaximumDate(QtCore.QDate(2024, 9, 1))
         self._date_from_widget.setToolTip("Начальная дата для расчета")
 
         # Конечная дата
@@ -346,8 +346,8 @@ class RoseOfWindForm:
             color: rgb(0, 0, 0);
         """)
         self._date_to_widget.setObjectName("k_data")
-        self._date_to_widget.setMinimumDate(QtCore.QDate(2010, 8, 31))
-        self._date_to_widget.setMaximumDate(QtCore.QDate(2025, 8, 31))
+        self._date_to_widget.setMinimumDate(QtCore.QDate(2026, 1, 31))
+        # self._date_to_widget.setMaximumDate(QtCore.QDate(2100, 8, 31))
         self._date_to_widget.setToolTip("Конечная дата для расчета")
 
     def widgets(self) -> list[QWidget]:
@@ -364,12 +364,12 @@ class RoseOfWindForm:
     def query_data(self) -> RoseOfWindFormResult:
         # Проверка наличия станций
         if not self.meteostation.get_current_stations():
-            raise ValueError("no uploaded meteostations")
+            raise ValueError("Нет загруженных метеостанций")
 
         # Получение выбранной станции
         station = self.meteostation.get_current_selected_station()
         if not station:
-            raise ValueError("no meteostation not selected")
+            raise ValueError("Нет выбранных метеостанций")
 
         # Получение параметров
         has_snow = self._has_snow_widget.isChecked()  # Снег
@@ -383,7 +383,7 @@ class RoseOfWindForm:
 
         # Проверка дат
         if date_from > date_to:
-            raise ValueError("date from if after date to")
+            raise ValueError("Дата начала превышает конечную дату")
 
         # Словарь для типов розы ветров
         rose_types = {
@@ -414,7 +414,10 @@ class RoseOfWindForm:
 
 
 def make_file_name_from_station(station: weather_station.WeatherStation) -> str:
-    return f"Роза ветров в {station.city_name}. График и таблица.docx"
+    csv_dir = os.path.dirname(station.csv_path)
+    filename = f"Роза ветров в {station.city_name}. График и таблица.docx"
+    safe_filename = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+    return os.path.join(csv_dir, safe_filename)
 
 
 def make_rose_of_wind_form_description(
@@ -506,10 +509,10 @@ class Ui_ROSA_VETROV(object):
             "load_csv_button",
         )
         self.add_meteostation_from_csv_button.setText(
-            "Загрузить CSV файл",
+            "Загрузить CSV/XLS файл",
         )
         self.add_meteostation_from_csv_button.setToolTip(
-            "Загрузить CSV файл с данными метеостанции",
+            "Загрузить CSV или XLS файл с данными метеостанции",
         )
 
         # Кнопка удаления выбранной станции
@@ -630,7 +633,7 @@ class Ui_ROSA_VETROV(object):
         self.menubar.addAction(self.menu_help.menuAction())
 
         # Добавляем действия в меню
-        self.action_load_csv = QtWidgets.QAction("Загрузить CSV", main_window)
+        self.action_load_csv = QtWidgets.QAction("Загрузить CSV/XLS", main_window)
         self.action_load_csv.setShortcut("Ctrl+O")
         self.action_exit = QtWidgets.QAction("Выход", main_window)
         self.action_exit.setShortcut("Ctrl+Q")
@@ -721,10 +724,11 @@ class Ui_ROSA_VETROV(object):
 
                 # Отображение графика
                 metadata = data.meteostation.get_metadata()
-                image_path = metadata[3] + ".jpg"
+                csv_dir = os.path.dirname(data.meteostation.csv_path)
+                image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
 
                 if not os.path.exists(image_path):
-                    raise FileNotFoundError("plot not found")
+                    raise FileNotFoundError("Ошибка при построении графика")
 
                 pix = QPixmap(image_path)
                 pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
