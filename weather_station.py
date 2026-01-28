@@ -81,35 +81,41 @@ class WeatherStation:
         return data.loc[((data["dt_time"] > df) & (data["dt_time"] < dt))]
 
     def get_data_for_rose_of_wind(
-        self,
-        date_from: datetime,
-        date_to: datetime,
-        snow: bool,
-        metel: bool,
+            self,
+            date_from: datetime,
+            date_to: datetime,
+            snow_only: bool,
+            wind_ge_3: bool,
     ) -> pd.DataFrame:
         """
         Retrieve pd.DataFrame from csv for building rose of wind.
 
         Fields:
-
         - wd - wind direction
         - ws - wind speed
         """
 
         data = self.get_data_in_date_interval(date_from, date_to)
-
         data = data.copy()
-
+    
+        # 1. Удаляем штиль
         data = self._remove_calm(data)
-        data = self._apply_snow_filter(data, snow)
-        data = self._apply_has_wind_over_3m_per_s_filter(data, metel)
-
-        data_wind = pd.DataFrame()
-
-        data_wind["wd"] = data["Wind_dir"]
-        data_wind["ws"] = data["wind_speed"]
-
-        return data_wind
+    
+        # 2. Фильтрация по снегу (ТОЛЬКО если запрошено)
+        if snow_only:
+            data = data[data["precipitation"] == 2]  # Только снег
+    
+        # 3. Фильтрация по ветру (ТОЛЬКО если запрошено)
+        if wind_ge_3:
+            data = data[data["wind_speed"] >= 3.0]
+    
+        # Формируем результат
+        data_wind = pd.DataFrame({
+            "wd": data["Wind_dir"],
+            "ws": data["wind_speed"]
+        })
+    
+        return data_wind.dropna()  # Удаляем возможные NaN
 
     @staticmethod
     def _remove_calm(data: pd.DataFrame) -> pd.DataFrame:
@@ -121,44 +127,6 @@ class WeatherStation:
         )
 
         data = data[data["Wind_dir"].notna()]
-
-        return data
-
-    @staticmethod
-    def _apply_snow_filter(
-        data: pd.DataFrame,
-        snow: bool,
-    ) -> pd.DataFrame:
-        # Фильтрация по снегу
-        if not snow:
-            return data
-
-        data = data.copy()
-
-        # выбор только тех значений, где sn=2 (снег)
-        data["precipitation"] = data["precipitation"].apply(
-            lambda x: np.nan if x != 2 else x
-        )
-
-        data = data[data["precipitation"].notna()]
-
-        return data
-
-    @staticmethod
-    def _apply_has_wind_over_3m_per_s_filter(
-        data: pd.DataFrame,
-        metel: bool,
-    ) -> pd.DataFrame:
-        # Фильтрация по снегу
-        if not metel:
-            return data
-
-        data = data.copy()
-
-        data["wind_speed"] = data["wind_speed"].apply(
-            lambda x: np.nan if x < 3 else x)
-
-        data = data[data["wind_speed"].notna()]
 
         return data
 
