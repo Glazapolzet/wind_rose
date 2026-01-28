@@ -46,17 +46,11 @@ def _find_header_row_and_time_col(excel_path: str) -> tuple[int, str]:
     raise ValueError("Не найдена колонка с временем (содержащая 'время' или 'time') в первых 20 строках")
 
 
-def preprocess_excel_to_csv(excel_path: str, city_name: str = None) -> str:
+def _process_common_dataframe(df: pd.DataFrame, time_col: str) -> pd.DataFrame:
     """
-    Обрабатывает Excel-файл метеостанции (в формате rp5.ru) и сохраняет в CSV в требуемом формате.
-    Возвращает путь к созданному CSV-файлу.
+    Общая логика обработки датафрейма после чтения из любого источника.
+    Выполняет все преобразования, кроме чтения файла.
     """
-    # Находим строку заголовка и имя колонки времени
-    header_row, time_col = _find_header_row_and_time_col(excel_path)
-    
-    # Читаем данные с правильным заголовком
-    df = pd.read_excel(excel_path, header=header_row)
-    
     # Удаляем лишние колонки (если они есть)
     cols_to_drop = ['N', 'Pa', 'Cm', 'Ch', 'Cl', 'Nh', 'H', "E'", 'E', 'RRR', 'Tn', 'Tx', 'Td', 'tR', 'Tg']
     df = df.drop(columns=[col for col in cols_to_drop if col in df.columns], errors='ignore')
@@ -69,32 +63,68 @@ def preprocess_excel_to_csv(excel_path: str, city_name: str = None) -> str:
         'DD': 'Wind_dir',
         'T': 't_tek'
     }
-    df = df.rename(columns=rename_map)
+    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
     
     # Преобразуем направление ветра
     if 'Wind_dir' in df.columns:
-        df['Wind_dir'] = df['Wind_dir'].map(WIND_DICT).fillna('CALM')
+        df['Wind_dir'] = df['Wind_dir'].astype(str).str.strip().str.strip('"').map(WIND_DICT).fillna('CALM')
     
-    # Обработка осадков
+    # Обработка осадков — гарантируем наличие колонок W1, W2, WW
     for col in ['W1', 'W2', 'WW']:
         if col not in df.columns:
             df[col] = '0'
         else:
-            df[col] = df[col].fillna('0').astype(str)
+            df[col] = df[col].fillna('0').astype(str).str.strip().str.strip('"')
     
+    # Создаём колонку осадков на основе WW/W1/W2
     df['combined'] = (df['WW'] + ' ' + df['W1'] + ' ' + df['W2']).str.lower()
     df['precipitation'] = 0
+    
     # Снег (включая "ливневый снег", "слабый снег" и т.п.)
     df.loc[df['combined'].str.contains(r'снег', na=False), 'precipitation'] = 2
+    
     # Дождь (только если температура > 0)
+    temp_series = pd.to_numeric(df.get('t_tek', pd.Series([np.nan] * len(df))), errors='coerce')
     df.loc[
-        (df.get('t_tek', pd.Series([np.nan] * len(df))) > 0) &
+        (temp_series > 0) &
         (df['combined'].str.contains(r'дождь|ливень', na=False)),
         'precipitation'
     ] = 1
     
     # Удаляем служебные колонки
     df = df.drop(columns=['WW', 'W1', 'W2', 'combined', 'snow,cm'], errors='ignore')
+    
+    # === КРИТИЧЕСКИ ВАЖНАЯ ПРОВЕРКА: гарантируем наличие обязательных колонок ===
+    # Если колонка осадков не была создана (нет данных WW/W1/W2), устанавливаем значение по умолчанию
+    if 'precipitation' not in df.columns:
+        df['precipitation'] = 0  # Нет данных об осадках = 0 (без осадков)
+    
+    # Проверяем обязательные колонки для работы приложения
+    required_cols = ['dt_time', 'Wind_dir', 'wind_speed', 'precipitation']
+    missing_required = [col for col in required_cols if col not in df.columns]
+    if missing_required:
+        raise ValueError(f"Отсутствуют обязательные колонки после обработки: {missing_required}")
+    
+    # Формируем финальный набор колонок в правильном порядке
+    final_columns = ['dt_time', 't_tek', 'Po', 'P', 'U', 'Wind_dir', 'wind_speed', 'ff10', 'ff3', 'VV', 'precipitation']
+    df = df[[col for col in final_columns if col in df.columns]]
+    
+    return df
+
+
+def preprocess_excel_to_csv(excel_path: str, city_name: str = None) -> str:
+    """
+    Обрабатывает Excel-файл метеостанции (в формате rp5.ru) и сохраняет в CSV в требуемом формате.
+    Возвращает путь к созданному CSV-файлу.
+    """
+    # Находим строку заголовка и имя колонки времени
+    header_row, time_col = _find_header_row_and_time_col(excel_path)
+    
+    # Читаем данные с правильным заголовком
+    df = pd.read_excel(excel_path, header=header_row)
+    
+    # Применяем общую логику обработки
+    df = _process_common_dataframe(df, time_col)
     
     # Сохраняем CSV в той же папке, что и исходный файл
     output_dir = os.path.dirname(excel_path)
@@ -156,43 +186,8 @@ def preprocess_csv_to_csv(csv_path: str, city_name: str = None) -> str:
     if time_col is None:
         raise ValueError("Не найдена колонка с временем (содержащая 'время' или 'time')")
     
-    # Переименовываем ключевые колонки (точно как требуется)
-    rename_map = {
-        time_col: 'dt_time',
-        'sss': 'snow,cm',
-        'Ff': 'wind_speed',
-        'DD': 'Wind_dir',
-        'T': 't_tek'
-    }
-    df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
-    
-    # Преобразуем направление ветра
-    if 'Wind_dir' in df.columns:
-        df['Wind_dir'] = df['Wind_dir'].str.strip().str.strip('"').map(WIND_DICT).fillna('CALM')
-    
-    # Обработка осадков
-    for col in ['W1', 'W2', 'WW']:
-        if col not in df.columns:
-            df[col] = '0'
-        else:
-            df[col] = df[col].fillna('0').astype(str).str.strip().str.strip('"')
-    
-    df['combined'] = (df['WW'] + ' ' + df['W1'] + ' ' + df['W2']).str.lower()
-    df['precipitation'] = 0
-    df.loc[df['combined'].str.contains(r'снег', na=False), 'precipitation'] = 2
-    df.loc[
-        (pd.to_numeric(df.get('t_tek', pd.Series([np.nan] * len(df))), errors='coerce') > 0) &
-        (df['combined'].str.contains(r'дождь|ливень', na=False)),
-        'precipitation'
-    ] = 1
-    
-    # Удаляем служебные колонки
-    df = df.drop(columns=['WW', 'W1', 'W2', 'combined', 'snow,cm'], errors='ignore')
-    
-    # Формируем финальный набор колонок в правильном порядке
-    final_columns = ['dt_time', 't_tek', 'Po', 'P', 'U', 'Wind_dir', 'wind_speed', 'ff10', 'ff3', 'VV', 'precipitation']
-    existing_cols = [col for col in final_columns if col in df.columns]
-    df = df[existing_cols]
+    # Применяем общую логику обработки
+    df = _process_common_dataframe(df, time_col)
     
     # Сохраняем результат
     output_dir = os.path.dirname(csv_path)
@@ -223,7 +218,8 @@ def preprocess_file(file_path: str, city_name: str = None) -> str:
         
         # Проверяем наличие ключевых колонок для преобразования
         if 'T' not in cols or 'DD' not in cols or 'Ff' not in cols:
-            raise ValueError("XLS файл не содержит необходимых колонок")
+            raise ValueError(
+                "XLS файл не содержит необходимых колонок: T (температура), DD (направление ветра), Ff (скорость ветра)")
         
         # Обрабатываем файл
         return preprocess_excel_to_csv(file_path, city_name)
@@ -252,7 +248,12 @@ def preprocess_file(file_path: str, city_name: str = None) -> str:
         has_time = any(re.search(r'время|time', col, re.IGNORECASE) for col in header)
         
         if not (has_t and has_dd and has_ff and has_time):
-            raise ValueError("CSV файл не содержит необходимых колонок")
+            missing = []
+            if not has_t: missing.append('T')
+            if not has_dd: missing.append('DD')
+            if not has_ff: missing.append('Ff')
+            if not has_time: missing.append('время/time')
+            raise ValueError(f"CSV файл не содержит необходимых колонок: {', '.join(missing)}")
         
         # Обрабатываем файл
         return preprocess_csv_to_csv(file_path, city_name)
