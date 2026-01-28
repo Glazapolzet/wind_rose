@@ -41,7 +41,7 @@ class MeteostationLoaderDialog:
 
         except BaseException as e:
             QMessageBox.critical(
-                self._centralwidget, "Ошибка", f"Введенные даныне не верны: {str(e)}",
+                self._centralwidget, "Ошибка", f"Введенные данные не верны: {str(e)}",
             )
 
         return None, False
@@ -56,7 +56,7 @@ class MeteostationLoaderDialog:
         )
 
         if not ok or not file_path:
-            raise ValueError("bad filepath")
+            raise ValueError("Путь к файлу не задан")
 
         city_name, ok = QInputDialog.getText(
             self._centralwidget,
@@ -65,7 +65,7 @@ class MeteostationLoaderDialog:
         )
 
         if not ok or not city_name:
-            raise ValueError("bad city name")
+            raise ValueError("Название станции содержит недопустимые символы")
 
         # Запрос названия в предложном падеже
         case_city, ok = QInputDialog.getText(
@@ -697,70 +697,128 @@ class Ui_ROSA_VETROV(object):
     def equal(self):
         """Основная функция расчета"""
         print("Начало расчета...")
-
+    
         try:
             data = self.rose_of_wind_form.query_data()
-
+        
             # Обновление названия в интерфейсе
             s = f"{data.meteostation.city_name}: {data.type_of_rose_str}"
             self.rose_name.setText(s)
-
+        
             save_to = make_file_name_from_station(data.meteostation)
+        
+            # === ВЫПОЛНЕНИЕ РАСЧЁТА С ОБРАБОТКОЙ ОШИБОК ===
+            success, error_msg = report_builder.make_report(
+                data.meteostation,
+                data.date_from,
+                data.date_to,
+                data.has_snow,
+                data.has_wind_over_3m_per_s,
+                data.type_of_rose,
+                save_to,
+            )
+        
+            if not success:
+                # Отображаем ошибку в интерфейсе
+                self.r_cond.setText(f"❌ ОШИБКА:\n{error_msg}")
+                self.statusbar.showMessage(f"Ошибка: {error_msg}", 5000)
+                return
+        
+            # Успешное выполнение - формируем описание
             description = make_rose_of_wind_form_description(data, save_to)
-
-            # Выполнение расчета
-            try:
-                report_builder.make_report(
-                    data.meteostation,
-                    data.date_from,
-                    data.date_to,
-                    data.has_snow,
-                    data.has_wind_over_3m_per_s,
-                    data.type_of_rose,
-                    save_to,
-                )
-
-                self.r_cond.setText(description)
-
-                # Отображение графика
-                metadata = data.meteostation.get_metadata()
-                csv_dir = os.path.dirname(data.meteostation.csv_path)
-                image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
-
-                if not os.path.exists(image_path):
-                    raise FileNotFoundError("Ошибка при построении графика")
-
-                pix = QPixmap(image_path)
-                pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
-                item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
-
-                scene = QtWidgets.QGraphicsScene()
-                scene.addItem(item)
-                self.graphicsView.setScene(scene)
-
-            except FileNotFoundError as e:
-                self.r_cond.setText(f"Ошибка: Файл не найден\n{str(e)}")
-
-            except pd.errors.EmptyDataError:
-                self.r_cond.setText(
-                    "Ошибка: CSV файл пуст или содержит некорректные данные"
-                )
-
-            except KeyError as e:
-                self.r_cond.setText(
-                    f"Ошибка: В CSV файле отсутствуют необходимые колонки\n{str(e)}"
-                )
-
-            except Exception as e:
-                import traceback
-
-                print(traceback.print_exc())
-                self.r_cond.setText(
-                    f"Ошибка при выполнении расчета:\n{str(e)}")
-                print(f"Ошибка: {e}")
-
+            self.r_cond.setText(description)
+            self.statusbar.showMessage("Расчёт успешно завершён", 3000)
+        
+            # Отображение графика
+            metadata = data.meteostation.get_metadata()
+            csv_dir = os.path.dirname(data.meteostation.csv_path)
+            image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
+        
+            if not os.path.exists(image_path):
+                raise FileNotFoundError(f"Файл графика не найден: {os.path.basename(image_path)}")
+        
+            pix = QPixmap(image_path)
+            pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
+            item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
+        
+            scene = QtWidgets.QGraphicsScene()
+            scene.addItem(item)
+            self.graphicsView.setScene(scene)
+    
         except BaseException as e:
             import traceback
-
-            print(traceback.print_exc())
-            self.r_cond.setText(str(e))
+            traceback.print_exc()
+            error_text = f"❌ КРИТИЧЕСКАЯ ОШИБКА:\n{str(e)}"
+            self.r_cond.setText(error_text)
+            self.statusbar.showMessage(f"Критическая ошибка: {str(e)}", 5000)
+            print(f"Критическая ошибка в equal(): {e}")
+    # def equal(self):
+    #     """Основная функция расчета"""
+    #     print("Начало расчета...")
+    #
+    #     try:
+    #         data = self.rose_of_wind_form.query_data()
+    #
+    #         # Обновление названия в интерфейсе
+    #         s = f"{data.meteostation.city_name}: {data.type_of_rose_str}"
+    #         self.rose_name.setText(s)
+    #
+    #         save_to = make_file_name_from_station(data.meteostation)
+    #         description = make_rose_of_wind_form_description(data, save_to)
+    #
+    #         # Выполнение расчета
+    #         try:
+    #             report_builder.make_report(
+    #                 data.meteostation,
+    #                 data.date_from,
+    #                 data.date_to,
+    #                 data.has_snow,
+    #                 data.has_wind_over_3m_per_s,
+    #                 data.type_of_rose,
+    #                 save_to,
+    #             )
+    #
+    #             self.r_cond.setText(description)
+    #
+    #             # Отображение графика
+    #             metadata = data.meteostation.get_metadata()
+    #             csv_dir = os.path.dirname(data.meteostation.csv_path)
+    #             image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
+    #
+    #             if not os.path.exists(image_path):
+    #                 raise FileNotFoundError("Ошибка при построении графика")
+    #
+    #             pix = QPixmap(image_path)
+    #             pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
+    #             item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
+    #
+    #             scene = QtWidgets.QGraphicsScene()
+    #             scene.addItem(item)
+    #             self.graphicsView.setScene(scene)
+    #
+    #         except FileNotFoundError as e:
+    #             self.r_cond.setText(f"Ошибка: Файл не найден\n{str(e)}")
+    #
+    #         except pd.errors.EmptyDataError:
+    #             self.r_cond.setText(
+    #                 "Ошибка: CSV файл пуст или содержит некорректные данные"
+    #             )
+    #
+    #         except KeyError as e:
+    #             self.r_cond.setText(
+    #                 f"Ошибка: В CSV файле отсутствуют необходимые колонки\n{str(e)}"
+    #             )
+    #
+    #         except Exception as e:
+    #             import traceback
+    #
+    #             print(traceback.print_exc())
+    #             self.r_cond.setText(
+    #                 f"Ошибка при выполнении расчета:\n{str(e)}")
+    #             print(f"Ошибка: {e}")
+    #
+    #     except BaseException as e:
+    #         import traceback
+    #
+    #         print(traceback.print_exc())
+    #         self.r_cond.setText(str(e))
