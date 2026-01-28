@@ -49,11 +49,14 @@ def make_report(
 
     rel_pivot = _create_percentage_pivot(abs_pivot, total_count=total)
 
+    csv_dir = os.path.dirname(station.csv_path)
+    image_full_path = os.path.join(csv_dir, f"{metadata[3]}.jpg")
+
     # Построение розы ветров
     _draw_and_save_wind_rose_plot(
         data,
         rose_type,
-        f"{metadata[3]}.jpg",
+        image_full_path,
         **{"total_count": total},
     )
 
@@ -65,7 +68,7 @@ def make_report(
         metel,
         metadata[1],
         rel_pivot,
-        f"{metadata[3]}.jpg",
+        image_full_path,
         total,
         doc_name,
     )
