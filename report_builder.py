@@ -17,23 +17,23 @@ def make_report(
     station: weather_station.WeatherStation,
     date_from: datetime,
     date_to: datetime,
-    snow: bool,
-    metel: bool,
+    snow_only: bool,
+    wind_ge_3: bool,
     rose_type: int,
     doc_name: str,
 ):
     """Основная функция обработки данных и генерации отчетов"""
     print(f"Обработка файла: {station.csv_path}")
     print(f"Период: с {date_from} по {date_to}")
-    print(f"Условия: снег={snow}, ветер≥3м/с={metel}")
+    print(f"Условия: снег={snow_only}, ветер≥3м/с={wind_ge_3}")
 
     metadata = station.get_metadata()
 
     data = station.get_data_for_rose_of_wind(
         date_from,
         date_to,
-        snow,
-        metel,
+        snow_only,
+        wind_ge_3,
     )
 
     # Проверка, остались ли данные после фильтрации
@@ -64,8 +64,8 @@ def make_report(
     _render_to_word(
         date_from,
         date_to,
-        snow,
-        metel,
+        snow_only,
+        wind_ge_3,
         metadata[1],
         rel_pivot,
         image_full_path,
@@ -348,8 +348,8 @@ def _get_sorted_speeds(index: pd.Index) -> list:
 def _render_to_word(
     date_from,
     date_to,
-    snow,
-    metel,
+    snow_only,
+    wind_ge_3,
     case_city,
     rel_pivot: pd.DataFrame,
     rose_of_wind_img_path: str,
@@ -357,12 +357,12 @@ def _render_to_word(
     doc_name: str,
 ):
     # Формирование описания условий
-    if snow:
+    if snow_only:
         sn = "Осадки в виде снега, "
     else:
         sn = "Независимо от осадков,"
 
-    if metel:
+    if wind_ge_3:
         sn = sn + "ветер 3 и более м/с. "
     else:
         sn = sn + "независимо от скорости ветра."
