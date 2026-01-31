@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
 
 import pandas as pd
 from PyQt5 import QtCore, QtWidgets
@@ -15,9 +15,9 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
+import preobr
 import report_builder
 import weather_station
-import preobr
 
 
 @dataclass
@@ -41,7 +41,9 @@ class MeteostationLoaderDialog:
 
         except BaseException as e:
             QMessageBox.critical(
-                self._centralwidget, "Ошибка", f"Введенные данные не верны: {str(e)}",
+                self._centralwidget,
+                "Ошибка",
+                f"Введенные данные не верны: {str(e)}",
             )
 
         return None, False
@@ -149,34 +151,36 @@ class MeteostationsIndex:
         data, ok = self._add_item_dialog.query_data_safe()
         if not ok or not data:
             return
-    
+
         try:
             processed_csv_path = preobr.preprocess_file(data.file_path, data.city_name)
-        
+
             # Создание объекта метеостанции из обработанного CSV
             station = weather_station.WeatherStation(
                 processed_csv_path,
                 data.city_name,
                 data.city_case,
             )
-        
+
             self._stations.append(station)
             self._qcombobox.addItem(data.city_name)
-        
+
             QMessageBox.information(
                 self._centralwidget,
                 "Станция загружена",
                 f"Метеостанция '{data.city_name}' успешно загружена и обработана.",
             )
-        
+
             self._statusbar.showMessage(
                 f"Загружена и обработана станция: {data.city_name}",
                 3000,
             )
-    
+
         except Exception as e:
             QMessageBox.critical(
-                self._centralwidget, "Ошибка", f"Не удалось загрузить или обработать файл: {str(e)}"
+                self._centralwidget,
+                "Ошибка",
+                f"Не удалось загрузить или обработать файл: {str(e)}",
             )
 
     def handle_remove_station(self):
@@ -210,6 +214,7 @@ class MeteostationsIndex:
 
 @dataclass
 class RoseOfWindFormResult:
+    save_to: str
     date_from: date
     date_to: date
     has_snow: bool
@@ -347,7 +352,6 @@ class RoseOfWindForm:
         """)
         self._date_to_widget.setObjectName("k_data")
         self._date_to_widget.setMinimumDate(QtCore.QDate(2026, 1, 31))
-        # self._date_to_widget.setMaximumDate(QtCore.QDate(2100, 8, 31))
         self._date_to_widget.setToolTip("Конечная дата для расчета")
 
     def widgets(self) -> list[QWidget]:
@@ -362,6 +366,16 @@ class RoseOfWindForm:
         ]
 
     def query_data(self) -> RoseOfWindFormResult:
+        save_tofile_path = QFileDialog.getExistingDirectory(
+            parent=self._centralwidget,
+            caption="Выберите, куда сохранить отчет",
+            directory="",
+            options=QFileDialog.Option.ShowDirsOnly,
+        )
+
+        if not save_tofile_path:
+            raise ValueError("Путь к месту сохранения не задан")
+
         # Проверка наличия станций
         if not self.meteostation.get_current_stations():
             raise ValueError("Нет загруженных метеостанций")
@@ -402,6 +416,7 @@ class RoseOfWindForm:
 
         return RoseOfWindFormResult(
             **{
+                "save_to": save_tofile_path,
                 "date_from": date_from,
                 "date_to": date_to,
                 "has_snow": has_snow,
@@ -413,11 +428,20 @@ class RoseOfWindForm:
         )
 
 
-def make_file_name_from_station(station: weather_station.WeatherStation) -> str:
-    csv_dir = os.path.dirname(station.csv_path)
-    filename = f"Роза ветров в {station.city_name}. График и таблица.docx"
+def make_file_name_from_station(
+    save_to_dir: str, station: weather_station.WeatherStation
+) -> str:
+    filename = ". ".join(
+        [
+            f"Роза ветров в {station.city_name}",
+            "График и таблица",
+            f"Время генерации {datetime.now()}.docx",
+        ]
+    )
+
     safe_filename = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
-    return os.path.join(csv_dir, safe_filename)
+
+    return os.path.join(save_to_dir, safe_filename)
 
 
 def make_rose_of_wind_form_description(
@@ -546,21 +570,18 @@ class Ui_ROSA_VETROV(object):
         """)
         self.start_calc.setObjectName("start_calc")
         self.start_calc.setText("РАСЧЕТ")
-        self.start_calc.setToolTip(
-            "Выполнить расчет для выбранных условий")
+        self.start_calc.setToolTip("Выполнить расчет для выбранных условий")
 
         # Область для графика
         self.graphicsView = QtWidgets.QGraphicsView(self.centralwidget)
         self.graphicsView.setGeometry(QtCore.QRect(400, 80, 350, 300))
-        self.graphicsView.setStyleSheet(
-            "background-color: rgb(255, 255, 255);")
+        self.graphicsView.setStyleSheet("background-color: rgb(255, 255, 255);")
         self.graphicsView.setObjectName("graphicsView")
         self.graphicsView.setStyleSheet("""
             background-color: rgb(255, 255, 255);
             color: rgb(0, 0, 0);
         """)
-        self.graphicsView.setToolTip(
-            "Здесь будет представлен график розы ветров")
+        self.graphicsView.setToolTip("Здесь будет представлен график розы ветров")
 
         # Область для условий расчета
         self.r_cond = QtWidgets.QLabel(self.centralwidget)
@@ -585,8 +606,7 @@ class Ui_ROSA_VETROV(object):
         """)
         self.exit_program.setObjectName("exit_program")
         self.exit_program.setText("ВЫХОД")
-        self.exit_program.setToolTip(
-            "Выход из программы")
+        self.exit_program.setToolTip("Выход из программы")
 
         # Название розы ветров
         self.rose_name = QtWidgets.QLabel(self.centralwidget)
@@ -660,7 +680,10 @@ class Ui_ROSA_VETROV(object):
         )
 
         self.rose_name.setText(
-            _translate("ROSA_VETROV", "Чтобы отобразить график розы ветров, выберите метеостанцию и параметры"),
+            _translate(
+                "ROSA_VETROV",
+                "Чтобы отобразить график розы ветров, выберите метеостанцию и параметры",
+            ),
         )
 
     def connect_handlers(self):
@@ -673,8 +696,7 @@ class Ui_ROSA_VETROV(object):
         self.remove_meteostation_button.clicked.connect(
             self.meteostation.handle_remove_station
         )
-        self.action_load_csv.triggered.connect(
-            self.meteostation.handle_add_station)
+        self.action_load_csv.triggered.connect(self.meteostation.handle_add_station)
         self.action_exit.triggered.connect(self.app.close)
         self.action_about.triggered.connect(self.show_about)
 
@@ -697,16 +719,17 @@ class Ui_ROSA_VETROV(object):
     def equal(self):
         """Основная функция расчета"""
         print("Начало расчета...")
-    
+
         try:
             data = self.rose_of_wind_form.query_data()
-        
+
             # Обновление названия в интерфейсе
             s = f"{data.meteostation.city_name}: {data.type_of_rose_str}"
             self.rose_name.setText(s)
-        
-            save_to = make_file_name_from_station(data.meteostation)
-        
+
+            save_to = make_file_name_from_station(data.save_to, data.meteostation)
+            save_image_to = save_to + ".jpg"
+
             # === ВЫПОЛНЕНИЕ РАСЧЁТА С ОБРАБОТКОЙ ОШИБОК ===
             success, error_msg = report_builder.make_report(
                 data.meteostation,
@@ -716,109 +739,33 @@ class Ui_ROSA_VETROV(object):
                 data.has_wind_over_3m_per_s,
                 data.type_of_rose,
                 save_to,
+                save_image_to,
             )
-        
+
             if not success:
                 # Отображаем ошибку в интерфейсе
                 self.r_cond.setText(f"❌ ОШИБКА:\n{error_msg}")
                 self.statusbar.showMessage(f"Ошибка: {error_msg}", 5000)
                 return
-        
+
             # Успешное выполнение - формируем описание
             description = make_rose_of_wind_form_description(data, save_to)
             self.r_cond.setText(description)
             self.statusbar.showMessage("Расчёт успешно завершён", 3000)
-        
-            # Отображение графика
-            metadata = data.meteostation.get_metadata()
-            csv_dir = os.path.dirname(data.meteostation.csv_path)
-            image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
-        
-            if not os.path.exists(image_path):
-                raise FileNotFoundError(f"Файл графика не найден: {os.path.basename(image_path)}")
-        
-            pix = QPixmap(image_path)
+
+            pix = QPixmap(save_image_to)
             pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
             item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
-        
+
             scene = QtWidgets.QGraphicsScene()
             scene.addItem(item)
             self.graphicsView.setScene(scene)
-    
+
         except BaseException as e:
             import traceback
+
             traceback.print_exc()
             error_text = f"❌ КРИТИЧЕСКАЯ ОШИБКА:\n{str(e)}"
             self.r_cond.setText(error_text)
             self.statusbar.showMessage(f"Критическая ошибка: {str(e)}", 5000)
             print(f"Критическая ошибка в equal(): {e}")
-    # def equal(self):
-    #     """Основная функция расчета"""
-    #     print("Начало расчета...")
-    #
-    #     try:
-    #         data = self.rose_of_wind_form.query_data()
-    #
-    #         # Обновление названия в интерфейсе
-    #         s = f"{data.meteostation.city_name}: {data.type_of_rose_str}"
-    #         self.rose_name.setText(s)
-    #
-    #         save_to = make_file_name_from_station(data.meteostation)
-    #         description = make_rose_of_wind_form_description(data, save_to)
-    #
-    #         # Выполнение расчета
-    #         try:
-    #             report_builder.make_report(
-    #                 data.meteostation,
-    #                 data.date_from,
-    #                 data.date_to,
-    #                 data.has_snow,
-    #                 data.has_wind_over_3m_per_s,
-    #                 data.type_of_rose,
-    #                 save_to,
-    #             )
-    #
-    #             self.r_cond.setText(description)
-    #
-    #             # Отображение графика
-    #             metadata = data.meteostation.get_metadata()
-    #             csv_dir = os.path.dirname(data.meteostation.csv_path)
-    #             image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
-    #
-    #             if not os.path.exists(image_path):
-    #                 raise FileNotFoundError("Ошибка при построении графика")
-    #
-    #             pix = QPixmap(image_path)
-    #             pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
-    #             item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
-    #
-    #             scene = QtWidgets.QGraphicsScene()
-    #             scene.addItem(item)
-    #             self.graphicsView.setScene(scene)
-    #
-    #         except FileNotFoundError as e:
-    #             self.r_cond.setText(f"Ошибка: Файл не найден\n{str(e)}")
-    #
-    #         except pd.errors.EmptyDataError:
-    #             self.r_cond.setText(
-    #                 "Ошибка: CSV файл пуст или содержит некорректные данные"
-    #             )
-    #
-    #         except KeyError as e:
-    #             self.r_cond.setText(
-    #                 f"Ошибка: В CSV файле отсутствуют необходимые колонки\n{str(e)}"
-    #             )
-    #
-    #         except Exception as e:
-    #             import traceback
-    #
-    #             print(traceback.print_exc())
-    #             self.r_cond.setText(
-    #                 f"Ошибка при выполнении расчета:\n{str(e)}")
-    #             print(f"Ошибка: {e}")
-    #
-    #     except BaseException as e:
-    #         import traceback
-    #
-    #         print(traceback.print_exc())
-    #         self.r_cond.setText(str(e))
