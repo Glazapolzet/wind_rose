@@ -21,6 +21,7 @@ def make_report(
     wind_ge_3: bool,
     rose_type: int,
     doc_name: str,
+    img_name: str,
 ) -> tuple[bool, str | None]:
     """
     Основная функция обработки данных и генерации отчетов.
@@ -84,28 +85,20 @@ def make_report(
         except Exception as e:
             return False, f"Ошибка при расчете процентов: {str(e)}"
 
-        # Подготовка путей
-        try:
-            image_dir = os.path.dirname(doc_name)
-            base_name = os.path.basename(doc_name)
-            image_full_path = os.path.join(image_dir, base_name + ".jpg")
-        except Exception as e:
-            return False, f"Ошибка при подготовке путей для сохранения: {str(e)}"
-
         # Построение розы ветров
         try:
             _draw_and_save_wind_rose_plot(
                 data,
                 rose_type,
-                image_full_path,
+                img_name,
                 total_count=total,
             )
 
             # Проверка, что изображение сохранено
-            if not os.path.exists(image_full_path):
+            if not os.path.exists(img_name):
                 return (
                     False,
-                    f"Ошибка: файл изображения не был создан: {os.path.basename(image_full_path)}",
+                    f"Ошибка: файл изображения не был создан: {img_name}",
                 )
         except Exception as e:
             return False, f"Ошибка при построении розы ветров: {str(e)}"
@@ -119,7 +112,7 @@ def make_report(
                 wind_ge_3,
                 metadata[1],
                 rel_pivot,
-                image_full_path,
+                img_name,
                 total,
                 doc_name,
             )

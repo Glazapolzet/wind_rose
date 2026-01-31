@@ -47,8 +47,7 @@ class WeatherStation:
             "precipitation",
         ]
 
-        missing_columns = [
-            col for col in required_columns if col not in data.columns]
+        missing_columns = [col for col in required_columns if col not in data.columns]
 
         if missing_columns:
             raise ValueError(f"miss columns: {missing_columns}")
@@ -81,11 +80,11 @@ class WeatherStation:
         return data.loc[((data["dt_time"] > df) & (data["dt_time"] < dt))]
 
     def get_data_for_rose_of_wind(
-            self,
-            date_from: datetime,
-            date_to: datetime,
-            snow_only: bool,
-            wind_ge_3: bool,
+        self,
+        date_from: datetime,
+        date_to: datetime,
+        snow_only: bool,
+        wind_ge_3: bool,
     ) -> pd.DataFrame:
         """
         Retrieve pd.DataFrame from csv for building rose of wind.
@@ -97,24 +96,21 @@ class WeatherStation:
 
         data = self.get_data_in_date_interval(date_from, date_to)
         data = data.copy()
-    
+
         # 1. Удаляем штиль
         data = self._remove_calm(data)
-    
+
         # 2. Фильтрация по снегу (ТОЛЬКО если запрошено)
         if snow_only:
             data = data[data["precipitation"] == 2]  # Только снег
-    
+
         # 3. Фильтрация по ветру (ТОЛЬКО если запрошено)
         if wind_ge_3:
             data = data[data["wind_speed"] >= 3.0]
-    
+
         # Формируем результат
-        data_wind = pd.DataFrame({
-            "wd": data["Wind_dir"],
-            "ws": data["wind_speed"]
-        })
-    
+        data_wind = pd.DataFrame({"wd": data["Wind_dir"], "ws": data["wind_speed"]})
+
         return data_wind.dropna()  # Удаляем возможные NaN
 
     @staticmethod
@@ -141,7 +137,7 @@ class LoadMeteostationQuery:
 
 
 def load_default_stations(
-        queries: list[LoadMeteostationQuery],
+    queries: list[LoadMeteostationQuery],
 ) -> list[WeatherStation]:
     stations = []
 

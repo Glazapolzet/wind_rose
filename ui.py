@@ -728,6 +728,7 @@ class Ui_ROSA_VETROV(object):
             self.rose_name.setText(s)
 
             save_to = make_file_name_from_station(data.save_to, data.meteostation)
+            save_image_to = save_to + ".jpg"
 
             # === ВЫПОЛНЕНИЕ РАСЧЁТА С ОБРАБОТКОЙ ОШИБОК ===
             success, error_msg = report_builder.make_report(
@@ -738,6 +739,7 @@ class Ui_ROSA_VETROV(object):
                 data.has_wind_over_3m_per_s,
                 data.type_of_rose,
                 save_to,
+                save_image_to,
             )
 
             if not success:
@@ -751,17 +753,7 @@ class Ui_ROSA_VETROV(object):
             self.r_cond.setText(description)
             self.statusbar.showMessage("Расчёт успешно завершён", 3000)
 
-            # Отображение графика
-            metadata = data.meteostation.get_metadata()
-            csv_dir = os.path.dirname(data.meteostation.csv_path)
-            image_path = os.path.join(csv_dir, metadata[3] + ".jpg")
-
-            if not os.path.exists(image_path):
-                raise FileNotFoundError(
-                    f"Файл графика не найден: {os.path.basename(image_path)}"
-                )
-
-            pix = QPixmap(image_path)
+            pix = QPixmap(save_image_to)
             pixmap_scaled = pix.scaled(290, 290, QtCore.Qt.KeepAspectRatio)
             item = QtWidgets.QGraphicsPixmapItem(pixmap_scaled)
 
