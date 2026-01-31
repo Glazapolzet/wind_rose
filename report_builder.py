@@ -160,7 +160,7 @@ def _draw_and_save_wind_rose_plot(data, rose_name, save_to, total_count=None):
     ax = WindroseAxes.from_ax(fig=fig)
     
     # Определяем бины для скорости ветра
-    max_ws = int(data["ws"].max()) + 1
+    max_ws = int(data["ws"].max())
     bins = np.arange(0, max_ws + 1, 1)
     
     # Построение графика в зависимости от типа
