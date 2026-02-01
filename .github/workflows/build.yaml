@@ -65,4 +65,4 @@ jobs:
             RoseOfWind-windows-x64.exe
             RoseOfWind-macos-x64.app
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT_WIND_ROSE }}
